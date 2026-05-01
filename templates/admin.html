@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Owner Studio{% endblock %}
+{% block content %}
+<section class="admin-shell">
+  <div class="section-head">
+    <h1>Owner Studio</h1>
+    <form method="post" action="/admin/logout"><button class="button ghost" type="submit">Logout</button></form>
+  </div>
+
+  <div class="studio-grid">
+    <form class="studio-card" method="post" action="/admin/upload" enctype="multipart/form-data">
+      <h2>Upload Tech Video</h2>
+      <input name="title" placeholder="Video title" required>
+      <textarea name="description" placeholder="Description"></textarea>
+      <input name="keywords" placeholder="Keywords, comma separated">
+      <div class="two-col">
+        <select name="video_type" required>
+          <option value="short">Short</option>
+          <option value="long">Long</option>
+        </select>
+        <input name="category" placeholder="Category e.g. AI, DevOps">
+      </div>
+      <input name="playlist" placeholder="Playlist for long videos">
+      <label class="file-box">Video file<input name="file" type="file" accept="video/*" required></label>
+      <label class="file-box">Poster image<input name="poster" type="file" accept="image/*"></label>
+      <button class="button primary" type="submit"><i data-lucide="upload"></i> Upload and Compress</button>
+    </form>
+
+    <form class="studio-card" method="post" action="/admin/channels" enctype="multipart/form-data">
+      <h2>Add Channel</h2>
+      <input name="name" placeholder="Channel name" required>
+      <input name="url" type="url" placeholder="Paste URL" required>
+      <select name="icon">
+        <option value="instagram">Instagram</option>
+        <option value="linkedin">LinkedIn</option>
+        <option value="youtube">YouTube</option>
+        <option value="briefcase-business">Portfolio</option>
+        <option value="user">Profile</option>
+      </select>
+      <label class="file-box">Custom image<input name="image" type="file" accept="image/*"></label>
+      <button class="button primary" type="submit"><i data-lucide="plus"></i> Add Channel</button>
+    </form>
+  </div>
+
+  <section class="section flush">
+    <h2>Uploaded Videos</h2>
+    <div class="table-list">
+      {% for video in videos %}
+      <div>
+        <strong>{{ video.title }}</strong>
+        <span>{{ video.video_type }} · {{ video.processing_status }}</span>
+      </div>
+      {% else %}
+      <div class="empty">No videos uploaded yet.</div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="section flush">
+    <h2>Channels</h2>
+    <div class="table-list">
+      {% for channel in channels %}
+      <div>
+        <strong>{{ channel.name }}</strong>
+        <span>{{ "Active" if channel.is_active else "Hidden" }}</span>
+        <form method="post" action="/admin/channels/{{ channel.id }}/toggle">
+          <button class="button ghost" type="submit">Toggle</button>
+        </form>
+      </div>
+      {% else %}
+      <div class="empty">No channels added yet.</div>
+      {% endfor %}
+    </div>
+  </section>
+</section>
+{% endblock %}

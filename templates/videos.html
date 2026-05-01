@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Video Library{% endblock %}
+{% block content %}
+<section class="library-layout">
+  <aside class="filters">
+    <h2>Playlists</h2>
+    <a class="{{ 'active' if not active_playlist else '' }}" href="/videos">All videos</a>
+    {% for playlist in playlists %}
+    <a class="{{ 'active' if active_playlist == playlist.slug else '' }}" href="/videos?playlist={{ playlist.slug }}">{{ playlist.name }}</a>
+    {% endfor %}
+  </aside>
+  <section class="section flush">
+    <div class="section-head">
+      <h1>Long Videos</h1>
+      <form class="inline-search" method="get" action="/videos">
+        <input name="q" value="{{ q }}" placeholder="Search every long video">
+        <button class="button primary" type="submit"><i data-lucide="search"></i> Search</button>
+      </form>
+    </div>
+    <div class="video-grid">
+      {% for video in videos %}
+      <article class="video-card">
+        <a href="/watch/{{ video.id }}" class="poster wide">
+          {% if video.poster_path %}<img src="{{ video.poster_path|media_url }}" alt="{{ video.title }}">{% endif %}
+          <span class="play-chip"><i data-lucide="play"></i></span>
+        </a>
+        <h3>{{ video.title }}</h3>
+        <p>{{ video.category.name if video.category else "Tech" }} · {{ video.playlist.name if video.playlist else "No playlist" }}</p>
+      </article>
+      {% else %}
+      <div class="empty">Nothing matched your search.</div>
+      {% endfor %}
+    </div>
+  </section>
+</section>
+{% endblock %}

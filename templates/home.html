@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Tech Shorts and Channels{% endblock %}
+{% block content %}
+<section class="hero-band">
+  <div>
+    <p class="eyebrow">Tech only video network</p>
+    <h1>Shorts, tutorials, portfolios, and social channels in one sharp hub.</h1>
+  </div>
+  <div class="hero-stats">
+    <span>{{ shorts|length }} shorts</span>
+    <span>{{ long_videos|length }} long videos</span>
+    <span>{{ channels|length }} channels</span>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-head">
+    <h2>Shorts</h2>
+    <span>Tap any short; the player continues sequentially.</span>
+  </div>
+  {% if shorts %}
+  <div class="shorts-rail" data-shorts-rail>
+    {% for video in shorts %}
+    <article class="short-card">
+      <a href="/watch/{{ video.id }}" class="poster tall">
+        {% if video.poster_path %}<img src="{{ video.poster_path|media_url }}" alt="{{ video.title }}">{% endif %}
+        <span class="play-chip"><i data-lucide="play"></i></span>
+      </a>
+      <h3>{{ video.title }}</h3>
+      <p>{{ video.category.name if video.category else "Tech" }}</p>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty">No shorts uploaded yet.</div>
+  {% endif %}
+</section>
+
+<section class="section">
+  <div class="section-head">
+    <h2>Channels</h2>
+    <span>Add Instagram, LinkedIn, YouTube, portfolio links, and more.</span>
+  </div>
+  <div class="channel-grid">
+    {% for channel in channels %}
+    <a class="channel-tile" href="{{ channel.url }}" target="_blank" rel="noopener">
+      {% if channel.image_path %}
+      <img src="{{ channel.image_path|media_url }}" alt="{{ channel.name }}">
+      {% else %}
+      <i data-lucide="{{ channel.icon or 'user' }}"></i>
+      {% endif %}
+      <strong>{{ channel.name }}</strong>
+    </a>
+    {% else %}
+    <div class="empty">No public channels yet.</div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-head">
+    <h2>Latest Long Videos</h2>
+    <a href="/videos">View all</a>
+  </div>
+  <div class="video-grid">
+    {% for video in long_videos[:8] %}
+    <article class="video-card">
+      <a href="/watch/{{ video.id }}" class="poster wide">
+        {% if video.poster_path %}<img src="{{ video.poster_path|media_url }}" alt="{{ video.title }}">{% endif %}
+        <span class="play-chip"><i data-lucide="play"></i></span>
+      </a>
+      <h3>{{ video.title }}</h3>
+      <p>{{ video.playlist.name if video.playlist else "General playlist" }}</p>
+    </article>
+    {% else %}
+    <div class="empty">No long videos uploaded yet.</div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+tech_video_hub.db
+media/uploads/*
+media/posters/*
+media/channels/*
+media/hls/*
+!media/uploads/.gitkeep
+!media/posters/.gitkeep
+!media/channels/.gitkeep
+!media/hls/.gitkeep
