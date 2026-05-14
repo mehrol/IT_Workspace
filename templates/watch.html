@@ -3,23 +3,180 @@
 {% block content %}
 <section class="watch-layout">
   <article class="watch-main">
-    <div class="player-shell">
-      <video
-        class="video-player"
-        controls
-        playsinline
-        data-next-url="{{ '/watch/' ~ next_video.id if next_video else '' }}"
-        poster="{{ video.poster_path|media_url if video.poster_path else '' }}"
-        data-hls="{{ video.hls_path|media_url if video.hls_path else '' }}"
-        src="{{ video.source_path|media_url if not video.hls_path else '' }}">
-      </video>
-      <div class="quality-bar">
-        <button data-quality="auto" class="active">Auto</button>
-        <button data-quality="480">480</button>
-        <button data-quality="720">720</button>
-        <button data-quality="1080">1080</button>
+    <div class="player-shell" id="player-shell">
+
+      {% if video.direct_play_url %}
+      <div class="player-frame" id="player-frame">
+        <video
+          id="main-video"
+          class="video-player {{ 'vertical' if video.video_type == 'short' else '' }}"
+          playsinline
+          data-video-type="{{ video.video_type }}"
+          data-next-url="{{ '/watch/' ~ next_video.id if next_video else '' }}"
+          poster="{{ video.poster_path|media_url if video.poster_path else '' }}"
+          data-hls="{{ video.direct_play_url if video.direct_play_url.endswith('.m3u8') else '' }}"
+          src="{{ video.direct_play_url if not video.direct_play_url.endswith('.m3u8') else '' }}">
+        </video>
+
+        {% if video.video_type == "short" %}
+        <button class="video-play-overlay" id="short-overlay" type="button" aria-label="Play">
+          <i data-lucide="play"></i>
+        </button>
+        {% if next_video %}
+        <button class="short-skip-button" id="short-next" type="button" aria-label="Next clip">
+          <i data-lucide="skip-forward"></i>
+        </button>
+        {% endif %}
+        {% else %}
+        <div class="yt-controls" id="yt-controls">
+          <div class="yt-progress-area" id="yt-progress-area">
+            <div class="yt-progress-bar" id="yt-progress-bar">
+              <div class="yt-buf-bar" id="yt-buf-bar"></div>
+              <div class="yt-fill-bar" id="yt-fill-bar"></div>
+              <div class="yt-scrub-thumb" id="yt-scrub-thumb"></div>
+            </div>
+          </div>
+          <div class="yt-bottom-row">
+            <div class="yt-left">
+              <button class="yt-btn" id="yt-play" title="Play (k)"><i data-lucide="play" id="yt-icon-play"></i><i data-lucide="pause" id="yt-icon-pause" style="display:none"></i></button>
+              <button class="yt-btn" id="yt-rew" title="Rewind 10s (j)"><i data-lucide="rewind"></i></button>
+              <button class="yt-btn" id="yt-fwd" title="Forward 10s (l)"><i data-lucide="fast-forward"></i></button>
+              {% if next_video %}
+              <a class="yt-btn" href="/watch/{{ next_video.id }}" title="Next video"><i data-lucide="skip-forward"></i></a>
+              {% endif %}
+              <div class="yt-vol-group">
+                <button class="yt-btn" id="yt-mute" title="Mute (m)"><i data-lucide="volume-2" id="yt-icon-vol-on"></i><i data-lucide="volume-x" id="yt-icon-vol-off" style="display:none"></i></button>
+                <input class="yt-vol-slider" id="yt-vol" type="range" min="0" max="1" step="0.05" value="1">
+              </div>
+              <span class="yt-time" id="yt-time">0:00 / 0:00</span>
+            </div>
+            <div class="yt-right">
+              {% if video.caption_path %}
+              <button class="yt-btn yt-text-btn" id="yt-cc" title="Subtitles (c)">CC</button>
+              {% endif %}
+              <select class="yt-select" id="yt-speed" title="Speed">
+                <option value="0.25">0.25×</option>
+                <option value="0.5">0.5×</option>
+                <option value="0.75">0.75×</option>
+                <option value="1" selected>Normal</option>
+                <option value="1.25">1.25×</option>
+                <option value="1.5">1.5×</option>
+                <option value="2">2×</option>
+              </select>
+              <select class="yt-select" id="yt-quality" title="Quality">
+                <option value="auto">Auto</option>
+                <option value="480">480p</option>
+                <option value="720">720p</option>
+                <option value="1080">1080p</option>
+              </select>
+              <button class="yt-btn" id="yt-pip" title="Mini player (i)"><i data-lucide="picture-in-picture-2"></i></button>
+              <button class="yt-btn" id="yt-fs" title="Fullscreen (f)"><i data-lucide="maximize" id="yt-icon-fs-on"></i><i data-lucide="minimize" id="yt-icon-fs-off" style="display:none"></i></button>
+            </div>
+          </div>
+        </div>
+        <div class="yt-big-play" id="yt-big-play"><i data-lucide="play"></i></div>
+        {% endif %}
       </div>
+
+      {% elif video.embed_url %}
+      <div class="player-frame" id="player-frame">
+        <iframe
+          id="external-player-{{ video.id }}"
+          class="embed-player {{ 'vertical' if video.video_type == 'short' else '' }}"
+          src="{{ video.embed_url }}"
+          title="{{ video.title }}"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowfullscreen
+          data-platform="{{ video.external_platform or 'external' }}"
+          data-next-url="{{ '/watch/' ~ next_video.id if next_video else '' }}">
+        </iframe>
+      </div>
+
+      {% else %}
+      <div class="player-frame" id="player-frame">
+        <video
+          id="main-video"
+          class="video-player {{ 'vertical' if video.video_type == 'short' else '' }}"
+          playsinline
+          data-video-type="{{ video.video_type }}"
+          data-next-url="{{ '/watch/' ~ next_video.id if next_video else '' }}"
+          poster="{{ video.poster_path|media_url if video.poster_path else '' }}"
+          data-hls="{{ video.hls_path|media_url if video.hls_path else '' }}"
+          src="{{ video.source_path|media_url if not video.hls_path else '' }}">
+          {% if video.video_type == "long" and video.caption_path %}
+          <track kind="subtitles" src="{{ video.caption_path|media_url }}" srclang="en" label="English">
+          {% endif %}
+        </video>
+
+        {% if video.video_type == "short" %}
+        <button class="video-play-overlay" id="short-overlay" type="button" aria-label="Play">
+          <i data-lucide="play"></i>
+        </button>
+        {% if next_video %}
+        <button class="short-skip-button" id="short-next" type="button" aria-label="Next clip">
+          <i data-lucide="skip-forward"></i>
+        </button>
+        {% endif %}
+        {% else %}
+        <div class="yt-controls" id="yt-controls">
+          <div class="yt-progress-area" id="yt-progress-area">
+            <div class="yt-progress-bar" id="yt-progress-bar">
+              <div class="yt-buf-bar" id="yt-buf-bar"></div>
+              <div class="yt-fill-bar" id="yt-fill-bar"></div>
+              <div class="yt-scrub-thumb" id="yt-scrub-thumb"></div>
+            </div>
+          </div>
+          <div class="yt-bottom-row">
+            <div class="yt-left">
+              <button class="yt-btn" id="yt-play" title="Play (k)"><i data-lucide="play" id="yt-icon-play"></i><i data-lucide="pause" id="yt-icon-pause" style="display:none"></i></button>
+              <button class="yt-btn" id="yt-rew" title="Rewind 10s (j)"><i data-lucide="rewind"></i></button>
+              <button class="yt-btn" id="yt-fwd" title="Forward 10s (l)"><i data-lucide="fast-forward"></i></button>
+              {% if next_video %}
+              <a class="yt-btn" href="/watch/{{ next_video.id }}" title="Next video"><i data-lucide="skip-forward"></i></a>
+              {% endif %}
+              <div class="yt-vol-group">
+                <button class="yt-btn" id="yt-mute" title="Mute (m)"><i data-lucide="volume-2" id="yt-icon-vol-on"></i><i data-lucide="volume-x" id="yt-icon-vol-off" style="display:none"></i></button>
+                <input class="yt-vol-slider" id="yt-vol" type="range" min="0" max="1" step="0.05" value="1">
+              </div>
+              <span class="yt-time" id="yt-time">0:00 / 0:00</span>
+            </div>
+            <div class="yt-right">
+              {% if video.caption_path %}
+              <button class="yt-btn yt-text-btn" id="yt-cc" title="Subtitles (c)">CC</button>
+              {% endif %}
+              <select class="yt-select" id="yt-speed" title="Speed">
+                <option value="0.25">0.25×</option>
+                <option value="0.5">0.5×</option>
+                <option value="0.75">0.75×</option>
+                <option value="1" selected>Normal</option>
+                <option value="1.25">1.25×</option>
+                <option value="1.5">1.5×</option>
+                <option value="2">2×</option>
+              </select>
+              <select class="yt-select" id="yt-quality" title="Quality">
+                <option value="auto">Auto</option>
+                <option value="480">480p</option>
+                <option value="720">720p</option>
+                <option value="1080">1080p</option>
+              </select>
+              <button class="yt-btn" id="yt-pip" title="Mini player (i)"><i data-lucide="picture-in-picture-2"></i></button>
+              <button class="yt-btn" id="yt-fs" title="Fullscreen (f)"><i data-lucide="maximize" id="yt-icon-fs-on"></i><i data-lucide="minimize" id="yt-icon-fs-off" style="display:none"></i></button>
+            </div>
+          </div>
+        </div>
+        <div class="yt-big-play" id="yt-big-play"><i data-lucide="play"></i></div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {% if video.video_type == "short" and next_video %}
+      <div class="quality-bar">
+        <a class="button ghost" href="/watch/{{ next_video.id }}">Move Forward <i data-lucide="arrow-right"></i></a>
+      </div>
+      {% endif %}
+
     </div>
+
     <div class="watch-meta">
       <div>
         <h1>{{ video.title }}</h1>
@@ -29,9 +186,17 @@
         <form method="post" action="/videos/{{ video.id }}/like">
           <button class="button primary" type="submit"><i data-lucide="thumbs-up"></i> {{ like_count }}</button>
         </form>
-        <button class="button ghost" type="button" data-share><i data-lucide="share-2"></i> Share</button>
+        <button
+          class="button ghost"
+          type="button"
+          data-share
+          data-share-url="{{ request.url_for('watch', video_id=video.id) }}"
+          data-share-title="{{ video.title }}">
+          <i data-lucide="share-2"></i> Share
+        </button>
       </div>
     </div>
+
     <section class="comments">
       <h2>Comments</h2>
       <form method="post" action="/videos/{{ video.id }}/comment" class="comment-form">
@@ -49,11 +214,15 @@
       {% endfor %}
     </section>
   </article>
+
   <aside class="related">
     <h2>Related</h2>
     {% for item in related %}
     <a class="related-item" href="/watch/{{ item.id }}">
-      <span class="mini-poster">{% if item.poster_path %}<img src="{{ item.poster_path|media_url }}" alt="">{% endif %}</span>
+      <span class="mini-poster">
+        {% set video = item %}
+        {% include "_poster.html" %}
+      </span>
       <span>{{ item.title }}</span>
     </a>
     {% endfor %}

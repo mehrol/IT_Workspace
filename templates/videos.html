@@ -12,16 +12,12 @@
   <section class="section flush">
     <div class="section-head">
       <h1>Long Videos</h1>
-      <form class="inline-search" method="get" action="/videos">
-        <input name="q" value="{{ q }}" placeholder="Search every long video">
-        <button class="button primary" type="submit"><i data-lucide="search"></i> Search</button>
-      </form>
     </div>
     <div class="video-grid">
       {% for video in videos %}
       <article class="video-card">
         <a href="/watch/{{ video.id }}" class="poster wide">
-          {% if video.poster_path %}<img src="{{ video.poster_path|media_url }}" alt="{{ video.title }}">{% endif %}
+          {% include "_poster.html" %}
           <span class="play-chip"><i data-lucide="play"></i></span>
         </a>
         <h3>{{ video.title }}</h3>

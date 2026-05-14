@@ -1,0 +1,15 @@
+{% if video.poster_path %}
+<img src="{{ video.poster_path|media_url }}" alt="{{ video.title }}">
+{% elif video.thumbnail_url %}
+<img src="{{ video.thumbnail_url }}" alt="{{ video.title }}">
+{% elif video.external_platform %}
+<span class="poster-fallback">
+  <i data-lucide="play-square"></i>
+  <strong>Video</strong>
+</span>
+{% else %}
+<video muted preload="metadata" playsinline src="{{ video.source_path|media_url }}#t=0.1" aria-label="{{ video.title }}"></video>
+{% endif %}
+{% if video.direct_play_url %}
+<span data-hover-preview data-preview-platform="direct" data-preview-src="{{ video.direct_play_url }}" aria-hidden="true"></span>
+{% endif %}

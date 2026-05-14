@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Tech Shorts{% endblock %}
+{% block content %}
+<section class="page-hero">
+  <p class="eyebrow">Short-form learning</p>
+  <h1>Tech shorts</h1>
+  <p>Quick clips, fixes, walkthroughs, and ideas you can watch fast.</p>
+</section>
+
+<section class="section">
+  <div class="shorts-rail wrap">
+    {% for video in shorts %}
+    <article class="short-card">
+      <a href="/watch/{{ video.id }}" class="poster tall">
+        {% include "_poster.html" %}
+        <span class="play-chip"><i data-lucide="play"></i></span>
+      </a>
+      <h3>{{ video.title }}</h3>
+      <p>{{ video.category.name if video.category else "Tech" }}</p>
+    </article>
+    {% else %}
+    <div class="empty">No shorts matched your search.</div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

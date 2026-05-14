@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Freelancing Profiles{% endblock %}
+{% block content %}
+<section class="page-hero">
+  <p class="eyebrow">Available profiles</p>
+  <h1>Tech and design freelancers</h1>
+  <p>Review skilled technology and design profiles with role details, contact options, portfolio links, and resumes.</p>
+</section>
+
+<section class="section">
+  <div class="profile-tabs">
+    <a class="{{ 'active' if not active_domain else '' }}" href="/freelancing">All</a>
+    <a class="{{ 'active' if active_domain == 'tech' else '' }}" href="/freelancing?domain=tech">Tech</a>
+    <a class="{{ 'active' if active_domain == 'design' else '' }}" href="/freelancing?domain=design">Design</a>
+  </div>
+  <div class="profile-list">
+    {% for profile in freelancers %}
+    <article class="profile-card landscape">
+      <div class="profile-photo">
+        {% if profile.photo_path %}
+        <img src="{{ profile.photo_path|media_url }}" alt="{{ profile.name }}">
+        {% else %}
+        <i data-lucide="user-round"></i>
+        {% endif %}
+      </div>
+      <div class="profile-body">
+        <p class="profile-domain">{{ profile.domain }}</p>
+        <h2>{{ profile.name }}</h2>
+        <strong>{{ profile.role }}</strong>
+        <p>{{ profile.bio or "Profile details coming soon." }}</p>
+        <dl class="profile-details">
+          {% if profile.location %}<div><dt>Location</dt><dd>{{ profile.location }}</dd></div>{% endif %}
+          {% if profile.experience %}<div><dt>Experience</dt><dd>{{ profile.experience }}</dd></div>{% endif %}
+          {% if profile.skills %}<div><dt>Skills</dt><dd>{{ profile.skills }}</dd></div>{% endif %}
+          {% if profile.email %}<div><dt>Email</dt><dd><a href="mailto:{{ profile.email }}">{{ profile.email }}</a></dd></div>{% endif %}
+          {% if profile.phone %}<div><dt>Phone</dt><dd><a href="tel:{{ profile.phone }}">{{ profile.phone }}</a></dd></div>{% endif %}
+        </dl>
+        <div class="profile-actions">
+          {% if profile.portfolio_url %}<a class="button ghost" href="{{ profile.portfolio_url }}" target="_blank" rel="noopener">Portfolio</a>{% endif %}
+          {% if profile.resume_path %}<a class="button primary" href="{{ profile.resume_path|media_url }}" target="_blank" rel="noopener">Resume</a>{% endif %}
+        </div>
+      </div>
+    </article>
+    {% else %}
+    <div class="empty">No freelancer profiles matched your search.</div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

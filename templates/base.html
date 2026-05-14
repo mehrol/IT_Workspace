@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Tech Video Hub{% endblock %}</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
-  <link rel="stylesheet" href="/static/css/styles.css">
+  <link rel="stylesheet" href="/static/css/styles.css?v=4">
   <script defer src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
   <script defer src="https://unpkg.com/lucide@latest"></script>
   <script defer src="/static/js/app.js"></script>
@@ -16,13 +16,17 @@
       <span class="brand-mark">IT</span>
       <span>Tech Video Hub</span>
     </a>
-    <form class="search" action="/" method="get">
-      <i data-lucide="search"></i>
-      <input name="q" value="{{ q | default('') }}" placeholder="Search tech videos, keywords, playlists">
+    {% if show_search | default(true) %}
+    <form class="search collapsed" action="{{ search_action | default('/') }}" method="get" data-search-panel>
+      <button class="icon-button" type="button" aria-label="Open search" data-search-toggle><i data-lucide="search"></i></button>
+      <input name="q" value="{{ q | default('') }}" placeholder="Search this page">
+      <button class="button primary search-submit" type="submit">Search</button>
     </form>
+    {% endif %}
     <nav class="nav-actions">
-      <a href="/videos">Videos</a>
-      <a class="button ghost" href="/admin">Owner</a>
+      <a href="/">Home</a>
+      <a href="/freelancing">Freelancing</a>
+      <a href="/about">About</a>
     </nav>
   </header>
   <main>

@@ -1,15 +1,15 @@
 # Tech Video Hub
 
-A FastAPI web app for a tech-only video portfolio/channel hub. It supports owner-only uploads, shorts, long videos, playlists, public comments, likes, share links, searchable videos, and social/channel links with large icons or custom images.
+A FastAPI web app for a tech-only video portfolio/channel hub. It supports owner-only video link publishing, shorts, long videos, playlists, public comments, likes, share links, searchable videos, and social/channel links with large icons or custom images.
 
 ## Recommended Production Stack
 
 - **Database:** PostgreSQL for production, SQLite for local development.
-- **Video storage:** S3-compatible object storage such as AWS S3, Cloudflare R2, or MinIO. Keep only metadata in the database.
-- **Video processing:** FFmpeg worker queue in production, ideally Celery/RQ + Redis, generating adaptive HLS renditions.
-- **Delivery:** CDN in front of video files.
+- **Video storage:** not required for YouTube/Instagram links. Store only metadata and optional poster images.
+- **Poster/profile storage:** S3-compatible object storage such as AWS S3, Cloudflare R2, or MinIO for uploaded images and resumes.
+- **Delivery:** use the original platform players for YouTube/Instagram playback.
 
-This starter stores files under `media/` locally and uses SQLite by default.
+This starter stores optional images under `media/` locally and uses SQLite by default.
 
 ## Run Locally
 
@@ -25,8 +25,10 @@ Open `http://127.0.0.1:8000`.
 
 ## Owner Login
 
-Visit `/admin/login`. The default owner password is read from `OWNER_PASSWORD`; if missing it falls back to `change-me-now`.
+Use the private workspace login path shared with the owner. The default owner password is read from `OWNER_PASSWORD`; if missing it falls back to `change-me-now`.
 
-## Adaptive Video Quality
+## Video Links
 
-If `ffmpeg` is installed, uploads are compressed into HLS renditions up to 480p, 720p, and 1080p. The player uses automatic network-based quality by default and exposes quality options. If FFmpeg is not available, the original upload is still playable.
+Add a YouTube, YouTube Shorts, Instagram Reel, Instagram post, or other embeddable video URL from Owner Studio. YouTube links get automatic thumbnails and can auto-advance to the next video when playback ends.
+
+For direct in-site playback without a platform overlay, add a direct playable URL ending in `.mp4`, `.webm`, `.ogg`, `.mov`, or `.m3u8`. Instagram public post/reel URLs can be embedded, but Instagram may still show its own “Watch on Instagram” overlay inside the official iframe.

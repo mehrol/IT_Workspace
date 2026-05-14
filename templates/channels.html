@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Channels{% endblock %}
+{% block content %}
+<section class="page-hero">
+  <p class="eyebrow">Connected profiles</p>
+  <h1>Channels</h1>
+  <p>Browse the public social, portfolio, and creator links in one place.</p>
+</section>
+
+<section class="section">
+  <div class="channel-grid">
+    {% for channel in channels %}
+    <a class="channel-tile" href="{{ channel.url }}" target="_blank" rel="noopener">
+      {% if channel.image_path %}
+      <img src="{{ channel.image_path|media_url }}" alt="{{ channel.name }}">
+      {% else %}
+      <i data-lucide="{{ channel.icon or 'user' }}"></i>
+      {% endif %}
+      <strong>{{ channel.name }}</strong>
+    </a>
+    {% else %}
+    <div class="empty">No channels matched your search.</div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

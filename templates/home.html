@@ -4,16 +4,32 @@
 <section class="hero-band">
   <div>
     <p class="eyebrow">Tech only video network</p>
-    <h1>Shorts, tutorials, portfolios, and social channels in one sharp hub.</h1>
-  </div>
-  <div class="hero-stats">
-    <span>{{ shorts|length }} shorts</span>
-    <span>{{ long_videos|length }} long videos</span>
-    <span>{{ channels|length }} channels</span>
+    <h1>Social channels in one hub.</h1>
   </div>
 </section>
 
 <section class="section">
+  <div class="feature-grid">
+    <a class="feature-link" href="/shorts">
+      <i data-lucide="smartphone"></i>
+      <span><strong>Shorts</strong><small>Fast tech clips</small></span>
+    </a>
+    <a class="feature-link" href="/videos">
+      <i data-lucide="play-square"></i>
+      <span><strong>Videos</strong><small>Long tutorials and playlists</small></span>
+    </a>
+    <a class="feature-link" href="/channels">
+      <i data-lucide="radio"></i>
+      <span><strong>Channels</strong><small>Social and portfolio links</small></span>
+    </a>
+    <a class="feature-link" href="/freelancing">
+      <i data-lucide="briefcase-business"></i>
+      <span><strong>Freelancing</strong><small>Tech and design profiles</small></span>
+    </a>
+  </div>
+</section>
+
+<section class="section" id="shorts">
   <div class="section-head">
     <h2>Shorts</h2>
     <span>Tap any short; the player continues sequentially.</span>
@@ -23,7 +39,7 @@
     {% for video in shorts %}
     <article class="short-card">
       <a href="/watch/{{ video.id }}" class="poster tall">
-        {% if video.poster_path %}<img src="{{ video.poster_path|media_url }}" alt="{{ video.title }}">{% endif %}
+        {% include "_poster.html" %}
         <span class="play-chip"><i data-lucide="play"></i></span>
       </a>
       <h3>{{ video.title }}</h3>
@@ -36,10 +52,10 @@
   {% endif %}
 </section>
 
-<section class="section">
+<section class="section" id="channels">
   <div class="section-head">
     <h2>Channels</h2>
-    <span>Add Instagram, LinkedIn, YouTube, portfolio links, and more.</span>
+    <span>Add social, portfolio, creator links, and more.</span>
   </div>
   <div class="channel-grid">
     {% for channel in channels %}
@@ -47,7 +63,7 @@
       {% if channel.image_path %}
       <img src="{{ channel.image_path|media_url }}" alt="{{ channel.name }}">
       {% else %}
-      <i data-lucide="{{ channel.icon or 'user' }}"></i>
+      <i data-lucide="{{ 'play-square' if channel.icon == 'youtube' else channel.icon or 'user' }}"></i>
       {% endif %}
       <strong>{{ channel.name }}</strong>
     </a>
@@ -57,7 +73,7 @@
   </div>
 </section>
 
-<section class="section">
+<section class="section" id="videos">
   <div class="section-head">
     <h2>Latest Long Videos</h2>
     <a href="/videos">View all</a>
@@ -66,7 +82,7 @@
     {% for video in long_videos[:8] %}
     <article class="video-card">
       <a href="/watch/{{ video.id }}" class="poster wide">
-        {% if video.poster_path %}<img src="{{ video.poster_path|media_url }}" alt="{{ video.title }}">{% endif %}
+        {% include "_poster.html" %}
         <span class="play-chip"><i data-lucide="play"></i></span>
       </a>
       <h3>{{ video.title }}</h3>
@@ -77,4 +93,5 @@
     {% endfor %}
   </div>
 </section>
+
 {% endblock %}

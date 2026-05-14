@@ -3,18 +3,18 @@ import re
 import shutil
 import uuid
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeSerializer
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, inspect, or_, select, text
 from sqlalchemy.orm import Session
 
 from .database import Base, engine, get_db
-from .models import Category, Channel, Comment, Like, Playlist, Video
-from .video_processing import transcode_to_hls
+from .models import Category, Channel, Comment, FreelancerProfile, Like, Playlist, Video
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -22,12 +22,37 @@ MEDIA_DIR = BASE_DIR / "media"
 UPLOAD_DIR = MEDIA_DIR / "uploads"
 POSTER_DIR = MEDIA_DIR / "posters"
 CHANNEL_DIR = MEDIA_DIR / "channels"
+PROFILE_DIR = MEDIA_DIR / "profiles"
+RESUME_DIR = MEDIA_DIR / "resumes"
+CAPTION_DIR = MEDIA_DIR / "captions"
 HLS_DIR = MEDIA_DIR / "hls"
 
-for directory in (UPLOAD_DIR, POSTER_DIR, CHANNEL_DIR, HLS_DIR):
+for directory in (UPLOAD_DIR, POSTER_DIR, CHANNEL_DIR, PROFILE_DIR, RESUME_DIR, CAPTION_DIR, HLS_DIR):
     directory.mkdir(parents=True, exist_ok=True)
 
 Base.metadata.create_all(bind=engine)
+
+
+def ensure_schema():
+    inspector = inspect(engine)
+    if "videos" in inspector.get_table_names():
+        columns = {column["name"] for column in inspector.get_columns("videos")}
+        if "caption_path" not in columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE videos ADD COLUMN caption_path VARCHAR(500)"))
+        for name, definition in {
+            "source_url": "VARCHAR(900)",
+            "direct_play_url": "VARCHAR(900)",
+            "embed_url": "VARCHAR(900)",
+            "external_platform": "VARCHAR(60)",
+            "thumbnail_url": "VARCHAR(900)",
+        }.items():
+            if name not in columns:
+                with engine.begin() as connection:
+                    connection.execute(text(f"ALTER TABLE videos ADD COLUMN {name} {definition}"))
+
+
+ensure_schema()
 
 app = FastAPI(title="Tech Video Hub")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
@@ -59,7 +84,7 @@ def require_owner(request: Request):
             return True
     except BadSignature:
         pass
-    raise HTTPException(status_code=303, headers={"Location": "/admin/login"})
+    raise HTTPException(status_code=303, headers={"Location": "/workspace-login"})
 
 
 def get_or_create_named(db: Session, model, name: str | None):
@@ -88,6 +113,100 @@ def save_upload(upload: UploadFile, folder: Path) -> Path | None:
     return target
 
 
+def delete_media_file(path: str | None):
+    if not path:
+        return
+    try:
+        target = Path(path).resolve()
+        media_root = MEDIA_DIR.resolve()
+        if target.is_file() and target.is_relative_to(media_root):
+            target.unlink()
+    except (OSError, ValueError):
+        pass
+
+
+def is_direct_media_url(value: str) -> bool:
+    path = urlparse(value.strip()).path.lower()
+    return path.endswith((".mp4", ".webm", ".ogg", ".mov", ".m3u8"))
+
+
+def youtube_embed_url(video_id: str) -> str:
+    return f"https://www.youtube-nocookie.com/embed/{video_id}?enablejsapi=1&rel=0&modestbranding=1&playsinline=1&controls=0"
+
+
+def build_embed_details(video_url: str) -> dict[str, str | None]:
+    clean_url = video_url.strip()
+    parsed = urlparse(clean_url)
+    host = parsed.netloc.lower().replace("www.", "")
+    path = parsed.path.strip("/")
+
+    if is_direct_media_url(clean_url):
+        return {
+            "platform": "direct",
+            "embed_url": None,
+            "direct_play_url": clean_url,
+            "thumbnail_url": None,
+        }
+
+    if host in {"youtube.com", "m.youtube.com", "music.youtube.com"}:
+        video_id = parse_qs(parsed.query).get("v", [""])[0]
+        if not video_id and path.startswith(("shorts/", "embed/")):
+            video_id = path.split("/")[1]
+        if video_id:
+            return {
+                "platform": "youtube",
+                "embed_url": youtube_embed_url(video_id),
+                "direct_play_url": None,
+                "thumbnail_url": f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
+            }
+
+    if host == "youtu.be":
+        video_id = path.split("/")[0]
+        if video_id:
+            return {
+                "platform": "youtube",
+                "embed_url": youtube_embed_url(video_id),
+                "direct_play_url": None,
+                "thumbnail_url": f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
+            }
+
+    if "instagram.com" in host or host == "instagr.am":
+        pieces = [piece for piece in path.split("/") if piece]
+        if len(pieces) >= 2 and pieces[0] in {"p", "reel", "reels", "tv"}:
+            content_type = "reel" if pieces[0] == "reels" else pieces[0]
+            return {
+                "platform": "instagram",
+                "embed_url": f"https://www.instagram.com/{content_type}/{pieces[1]}/embed",
+                "direct_play_url": None,
+                "thumbnail_url": None,
+            }
+
+    return {"platform": "external", "embed_url": clean_url, "direct_play_url": None, "thumbnail_url": None}
+
+
+def refresh_external_video_details(video: Video) -> bool:
+    source_url = (video.source_url or video.source_path or "").strip()
+    if not source_url:
+        return False
+
+    details = build_embed_details(source_url)
+    changed = False
+    if details["platform"] in {"youtube", "instagram", "direct"}:
+        for field, value in {
+            "embed_url": details["embed_url"],
+            "external_platform": details["platform"],
+            "thumbnail_url": details["thumbnail_url"],
+        }.items():
+            if getattr(video, field) != value:
+                setattr(video, field, value)
+                changed = True
+        if details["direct_play_url"] and video.direct_play_url != details["direct_play_url"]:
+            video.direct_play_url = details["direct_play_url"]
+            changed = True
+
+    return changed
+
+
 def video_list_query(db: Session, search: str | None = None, video_type: str | None = None):
     query = select(Video)
     if video_type:
@@ -104,6 +223,27 @@ def video_list_query(db: Session, search: str | None = None, video_type: str | N
     return db.scalars(query.order_by(Video.created_at.desc())).all()
 
 
+def freelancer_list_query(db: Session, search: str | None = None, domain: str | None = None):
+    query = select(FreelancerProfile).where(
+        FreelancerProfile.is_active == True,
+        func.lower(FreelancerProfile.domain).in_(["tech", "design"]),
+    )
+    if domain:
+        query = query.where(func.lower(FreelancerProfile.domain) == domain.lower())
+    if search:
+        needle = f"%{search.strip()}%"
+        query = query.where(
+            or_(
+                FreelancerProfile.name.ilike(needle),
+                FreelancerProfile.role.ilike(needle),
+                FreelancerProfile.domain.ilike(needle),
+                FreelancerProfile.skills.ilike(needle),
+                FreelancerProfile.bio.ilike(needle),
+            )
+        )
+    return db.scalars(query.order_by(FreelancerProfile.created_at.desc())).all()
+
+
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request, q: str | None = None, db: Session = Depends(get_db)):
     shorts = video_list_query(db, search=q, video_type="short")
@@ -118,7 +258,54 @@ def home(request: Request, q: str | None = None, db: Session = Depends(get_db)):
             "long_videos": long_videos,
             "channels": channels,
             "categories": categories,
+            "search_action": "/",
             "q": q or "",
+        },
+    )
+
+
+@app.get("/shorts", response_class=HTMLResponse)
+def shorts_page(request: Request, q: str | None = None, db: Session = Depends(get_db)):
+    shorts = video_list_query(db, search=q, video_type="short")
+    return templates.TemplateResponse(
+        "shorts.html",
+        {"request": request, "shorts": shorts, "q": q or "", "search_action": "/shorts"},
+    )
+
+
+@app.get("/channels", response_class=HTMLResponse)
+def channels_page(request: Request, q: str | None = None, db: Session = Depends(get_db)):
+    query = select(Channel).where(Channel.is_active == True)
+    if q:
+        needle = f"%{q.strip()}%"
+        query = query.where(Channel.name.ilike(needle))
+    channels = db.scalars(query.order_by(Channel.created_at.desc())).all()
+    return templates.TemplateResponse(
+        "channels.html",
+        {"request": request, "channels": channels, "q": q or "", "search_action": "/channels"},
+    )
+
+
+@app.get("/about", response_class=HTMLResponse)
+def about_page(request: Request):
+    return templates.TemplateResponse(
+        "about.html",
+        {"request": request, "q": "", "search_action": "/"},
+    )
+
+
+@app.get("/freelancing", response_class=HTMLResponse)
+def freelancing_page(request: Request, q: str | None = None, domain: str | None = None, db: Session = Depends(get_db)):
+    clean_domain = domain if domain and domain.lower() in {"tech", "design"} else None
+    freelancers = freelancer_list_query(db, search=q, domain=clean_domain)
+    return templates.TemplateResponse(
+        "freelancing.html",
+        {
+            "request": request,
+            "freelancers": freelancers,
+            "q": q or "",
+            "active_domain": clean_domain or "",
+            "search_action": "/freelancing",
         },
     )
 
@@ -135,7 +322,14 @@ def videos(request: Request, q: str | None = None, playlist: str | None = None, 
     playlists = db.scalars(select(Playlist).order_by(Playlist.name)).all()
     return templates.TemplateResponse(
         "videos.html",
-        {"request": request, "videos": videos_, "playlists": playlists, "q": q or "", "active_playlist": playlist or ""},
+        {
+            "request": request,
+            "videos": videos_,
+            "playlists": playlists,
+            "q": q or "",
+            "active_playlist": playlist or "",
+            "search_action": "/videos",
+        },
     )
 
 
@@ -144,6 +338,9 @@ def watch(video_id: int, request: Request, db: Session = Depends(get_db)):
     video = db.get(Video, video_id)
     if not video:
         raise HTTPException(status_code=404)
+    if refresh_external_video_details(video):
+        db.commit()
+        db.refresh(video)
     related = db.scalars(
         select(Video).where(Video.id != video.id, Video.video_type == video.video_type).order_by(Video.created_at.desc()).limit(8)
     ).all()
@@ -189,15 +386,19 @@ def like_video(video_id: int, request: Request, db: Session = Depends(get_db)):
     return RedirectResponse(f"/watch/{video_id}", status_code=303)
 
 
-@app.get("/admin/login", response_class=HTMLResponse)
+@app.get("/workspace-login", response_class=HTMLResponse)
 def login_page(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request, "error": ""})
+    return templates.TemplateResponse("login.html", {"request": request, "error": "", "show_search": False})
 
 
-@app.post("/admin/login")
+@app.post("/workspace-login")
 def login(response: Response, request: Request, password: str = Form(...)):
     if password != OWNER_PASSWORD:
-        return templates.TemplateResponse("login.html", {"request": request, "error": "Wrong owner password."}, status_code=401)
+        return templates.TemplateResponse(
+            "login.html",
+            {"request": request, "error": "Wrong owner password.", "show_search": False},
+            status_code=401,
+        )
     redirect = RedirectResponse("/admin", status_code=303)
     redirect.set_cookie("owner_session", serializer.dumps("owner"), httponly=True, samesite="lax")
     return redirect
@@ -210,11 +411,27 @@ def logout():
     return redirect
 
 
+@app.post("/admin/videos/{video_id}/delete")
+def delete_video(video_id: int, db: Session = Depends(get_db), owner: bool = Depends(require_owner)):
+    video = db.get(Video, video_id)
+    if not video:
+        raise HTTPException(status_code=404)
+    for path in (video.poster_path, video.source_path, video.hls_path, video.caption_path):
+        delete_media_file(path)
+    db.delete(video)
+    db.commit()
+    return RedirectResponse("/admin", status_code=303)
+
+
 @app.get("/admin", response_class=HTMLResponse)
 def admin(request: Request, db: Session = Depends(get_db), owner: bool = Depends(require_owner)):
     videos_ = db.scalars(select(Video).order_by(Video.created_at.desc())).all()
     channels = db.scalars(select(Channel).order_by(Channel.created_at.desc())).all()
-    return templates.TemplateResponse("admin.html", {"request": request, "videos": videos_, "channels": channels})
+    freelancers = db.scalars(select(FreelancerProfile).order_by(FreelancerProfile.created_at.desc())).all()
+    return templates.TemplateResponse(
+        "admin.html",
+        {"request": request, "videos": videos_, "channels": channels, "freelancers": freelancers, "show_search": False},
+    )
 
 
 @app.post("/admin/upload")
@@ -225,14 +442,18 @@ def upload_video(
     video_type: str = Form(...),
     category: str = Form(""),
     playlist: str = Form(""),
-    file: UploadFile = File(...),
+    video_url: str = Form(...),
+    direct_play_url: str = Form(""),
     poster: UploadFile | None = File(None),
     db: Session = Depends(get_db),
     owner: bool = Depends(require_owner),
 ):
     if video_type not in {"short", "long"}:
         raise HTTPException(status_code=400, detail="Video type must be short or long.")
-    source = save_upload(file, UPLOAD_DIR)
+    embed_details = build_embed_details(video_url)
+    clean_direct_play_url = direct_play_url.strip() or embed_details["direct_play_url"]
+    if clean_direct_play_url and not is_direct_media_url(clean_direct_play_url):
+        raise HTTPException(status_code=400, detail="Direct play URL must end with .mp4, .webm, .ogg, .mov, or .m3u8.")
     poster_path = save_upload(poster, POSTER_DIR) if poster else None
     category_item = get_or_create_named(db, Category, category)
     playlist_item = get_or_create_named(db, Playlist, playlist) if video_type == "long" else None
@@ -242,22 +463,18 @@ def upload_video(
         description=description.strip(),
         keywords=keywords.strip(),
         video_type=video_type,
-        source_path=str(source),
+        source_path=video_url.strip(),
+        source_url=video_url.strip(),
+        direct_play_url=clean_direct_play_url,
+        embed_url=embed_details["embed_url"],
+        external_platform="direct" if clean_direct_play_url else embed_details["platform"],
+        thumbnail_url=embed_details["thumbnail_url"],
         poster_path=str(poster_path) if poster_path else None,
         category=category_item,
         playlist=playlist_item,
-        processing_status="processing",
+        processing_status="linked",
     )
     db.add(video)
-    db.commit()
-    db.refresh(video)
-
-    try:
-        master = transcode_to_hls(source, HLS_DIR / str(video.id))
-        video.hls_path = str(master) if master else None
-        video.processing_status = "ready" if master else "ready-original"
-    except Exception:
-        video.processing_status = "ready-original"
     db.commit()
     return RedirectResponse("/admin", status_code=303)
 
@@ -283,5 +500,79 @@ def toggle_channel(channel_id: int, db: Session = Depends(get_db), owner: bool =
     if not channel:
         raise HTTPException(status_code=404)
     channel.is_active = not channel.is_active
+    db.commit()
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/channels/{channel_id}/delete")
+def delete_channel(channel_id: int, db: Session = Depends(get_db), owner: bool = Depends(require_owner)):
+    channel = db.get(Channel, channel_id)
+    if not channel:
+        raise HTTPException(status_code=404)
+    delete_media_file(channel.image_path)
+    db.delete(channel)
+    db.commit()
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/freelancers")
+def add_freelancer(
+    name: str = Form(...),
+    role: str = Form(...),
+    domain: str = Form(...),
+    location: str = Form(""),
+    experience: str = Form(""),
+    skills: str = Form(""),
+    bio: str = Form(""),
+    email: str = Form(""),
+    phone: str = Form(""),
+    portfolio_url: str = Form(""),
+    photo: UploadFile | None = File(None),
+    resume: UploadFile | None = File(None),
+    db: Session = Depends(get_db),
+    owner: bool = Depends(require_owner),
+):
+    if domain.lower() not in {"tech", "design"}:
+        raise HTTPException(status_code=400, detail="Freelancer domain must be Tech or Design.")
+    photo_path = save_upload(photo, PROFILE_DIR) if photo and photo.filename else None
+    resume_path = save_upload(resume, RESUME_DIR) if resume and resume.filename else None
+    db.add(
+        FreelancerProfile(
+            name=name.strip(),
+            role=role.strip(),
+            domain=domain.strip(),
+            location=location.strip(),
+            experience=experience.strip(),
+            skills=skills.strip(),
+            bio=bio.strip(),
+            email=email.strip(),
+            phone=phone.strip(),
+            portfolio_url=portfolio_url.strip(),
+            photo_path=str(photo_path) if photo_path else None,
+            resume_path=str(resume_path) if resume_path else None,
+        )
+    )
+    db.commit()
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/freelancers/{profile_id}/toggle")
+def toggle_freelancer(profile_id: int, db: Session = Depends(get_db), owner: bool = Depends(require_owner)):
+    profile = db.get(FreelancerProfile, profile_id)
+    if not profile:
+        raise HTTPException(status_code=404)
+    profile.is_active = not profile.is_active
+    db.commit()
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/freelancers/{profile_id}/delete")
+def delete_freelancer(profile_id: int, db: Session = Depends(get_db), owner: bool = Depends(require_owner)):
+    profile = db.get(FreelancerProfile, profile_id)
+    if not profile:
+        raise HTTPException(status_code=404)
+    delete_media_file(profile.photo_path)
+    delete_media_file(profile.resume_path)
+    db.delete(profile)
     db.commit()
     return RedirectResponse("/admin", status_code=303)

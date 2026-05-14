@@ -1,6 +1,7 @@
 import os
 
 from sqlalchemy import create_engine
+from typing import Generator
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 
@@ -15,9 +16,13 @@ class Base(DeclarativeBase):
     pass
 
 
-def get_db():
+def get_db() -> Generator[SessionLocal, None, None]:
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
+
+def init_db() -> None:
+    """Create all database tables based on SQLAlchemy models."""
+    Base.metadata.create_all(bind=engine)
