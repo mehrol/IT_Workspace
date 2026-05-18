@@ -10,10 +10,10 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeSerializer
-from sqlalchemy import func, inspect, or_, select, text
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from .database import Base, engine, get_db
+from .database import get_db, initialize_database
 from .models import Category, Channel, Comment, FreelancerProfile, Like, Playlist, Video
 
 
@@ -30,30 +30,6 @@ HLS_DIR = MEDIA_DIR / "hls"
 for directory in (UPLOAD_DIR, POSTER_DIR, CHANNEL_DIR, PROFILE_DIR, RESUME_DIR, CAPTION_DIR, HLS_DIR):
     directory.mkdir(parents=True, exist_ok=True)
 
-Base.metadata.create_all(bind=engine)
-
-
-def ensure_schema():
-    inspector = inspect(engine)
-    if "videos" in inspector.get_table_names():
-        columns = {column["name"] for column in inspector.get_columns("videos")}
-        if "caption_path" not in columns:
-            with engine.begin() as connection:
-                connection.execute(text("ALTER TABLE videos ADD COLUMN caption_path VARCHAR(500)"))
-        for name, definition in {
-            "source_url": "VARCHAR(900)",
-            "direct_play_url": "VARCHAR(900)",
-            "embed_url": "VARCHAR(900)",
-            "external_platform": "VARCHAR(60)",
-            "thumbnail_url": "VARCHAR(900)",
-        }.items():
-            if name not in columns:
-                with engine.begin() as connection:
-                    connection.execute(text(f"ALTER TABLE videos ADD COLUMN {name} {definition}"))
-
-
-ensure_schema()
-
 app = FastAPI(title="Tech Video Hub")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
@@ -61,6 +37,11 @@ templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 serializer = URLSafeSerializer(os.getenv("SECRET_KEY", "replace-this-secret-key"), salt="owner-session")
 OWNER_PASSWORD = os.getenv("OWNER_PASSWORD", "change-me-now")
+
+
+@app.on_event("startup")
+def startup() -> None:
+    initialize_database()
 
 
 def slugify(value: str) -> str:
