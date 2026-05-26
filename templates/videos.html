@@ -13,20 +13,30 @@
     <div class="section-head">
       <h1>Long Videos</h1>
     </div>
-    <div class="video-grid">
-      {% for video in videos %}
-      <article class="video-card">
-        <a href="/watch/{{ video.id }}" class="poster wide">
-          {% include "_poster.html" %}
-          <span class="play-chip"><i data-lucide="play"></i></span>
-        </a>
-        <h3>{{ video.title }}</h3>
-        <p>{{ video.category.name if video.category else "Tech" }} · {{ video.playlist.name if video.playlist else "No playlist" }}</p>
-      </article>
-      {% else %}
-      <div class="empty">Nothing matched your search.</div>
-      {% endfor %}
+    {% if videos %}
+    <div class="rail-shell" data-rail-shell>
+      <button class="rail-arrow rail-arrow-left" type="button" aria-label="Previous videos" data-rail-prev>
+        <i data-lucide="chevron-left"></i>
+      </button>
+      <div class="video-rail" data-rail-track>
+        {% for video in videos %}
+        <article class="video-card">
+          <a href="/watch/{{ video.id }}" class="poster wide">
+            {% include "_poster.html" %}
+            <span class="play-chip"><i data-lucide="play"></i></span>
+          </a>
+          <h3>{{ video.title }}</h3>
+          <p>{{ video.category.name if video.category else "Tech" }} | {{ video.playlist.name if video.playlist else "No playlist" }}</p>
+        </article>
+        {% endfor %}
+      </div>
+      <button class="rail-arrow rail-arrow-right" type="button" aria-label="Next videos" data-rail-next>
+        <i data-lucide="chevron-right"></i>
+      </button>
     </div>
+    {% else %}
+    <div class="empty">Nothing matched your search.</div>
+    {% endif %}
   </section>
 </section>
 {% endblock %}

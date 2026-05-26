@@ -3,8 +3,9 @@
 {% block content %}
 <section class="hero-band">
   <div>
-    <p class="eyebrow">Tech only video network</p>
-    <h1>Social channels in one hub.</h1>
+    <p class="eyebrow">Tech video network</p>
+    <h1>Technical Hub</h1>
+    <p>Shorts, long videos, channels, and freelancing profiles.</p>
   </div>
 </section>
 
@@ -32,20 +33,28 @@
 <section class="section" id="shorts">
   <div class="section-head">
     <h2>Shorts</h2>
-    <span>Tap any short; the player continues sequentially.</span>
+    <span></span>
   </div>
   {% if shorts %}
-  <div class="shorts-rail" data-shorts-rail>
-    {% for video in shorts %}
-    <article class="short-card">
-      <a href="/watch/{{ video.id }}" class="poster tall">
-        {% include "_poster.html" %}
-        <span class="play-chip"><i data-lucide="play"></i></span>
-      </a>
-      <h3>{{ video.title }}</h3>
-      <p>{{ video.category.name if video.category else "Tech" }}</p>
-    </article>
-    {% endfor %}
+  <div class="rail-shell" data-rail-shell>
+    <button class="rail-arrow rail-arrow-left" type="button" aria-label="Previous shorts" data-rail-prev>
+      <i data-lucide="chevron-left"></i>
+    </button>
+    <div class="shorts-rail" data-rail-track>
+      {% for video in shorts %}
+      <article class="short-card">
+        <a href="/watch/{{ video.id }}" class="poster tall">
+          {% include "_poster.html" %}
+          <span class="play-chip"><i data-lucide="play"></i></span>
+        </a>
+        <h3>{{ video.title }}</h3>
+        <p>{{ video.category.name if video.category else "Tech" }}</p>
+      </article>
+      {% endfor %}
+    </div>
+    <button class="rail-arrow rail-arrow-right" type="button" aria-label="Next shorts" data-rail-next>
+      <i data-lucide="chevron-right"></i>
+    </button>
   </div>
   {% else %}
   <div class="empty">No shorts uploaded yet.</div>
@@ -55,9 +64,14 @@
 <section class="section" id="channels">
   <div class="section-head">
     <h2>Channels</h2>
-    <span>Add social, portfolio, creator links, and more.</span>
+    <span></span>
   </div>
-  <div class="channel-grid">
+  {% if channels %}
+  <div class="rail-shell" data-rail-shell>
+    <button class="rail-arrow rail-arrow-left" type="button" aria-label="Previous channels" data-rail-prev>
+      <i data-lucide="chevron-left"></i>
+    </button>
+    <div class="channel-rail" data-rail-track>
     {% for channel in channels %}
     <a class="channel-tile" href="{{ channel.url }}" target="_blank" rel="noopener">
       {% if channel.image_path %}
@@ -67,10 +81,15 @@
       {% endif %}
       <strong>{{ channel.name }}</strong>
     </a>
-    {% else %}
-    <div class="empty">No public channels yet.</div>
     {% endfor %}
+    </div>
+    <button class="rail-arrow rail-arrow-right" type="button" aria-label="Next channels" data-rail-next>
+      <i data-lucide="chevron-right"></i>
+    </button>
   </div>
+  {% else %}
+  <div class="empty">No public channels yet.</div>
+  {% endif %}
 </section>
 
 <section class="section" id="videos">
@@ -78,20 +97,30 @@
     <h2>Latest Long Videos</h2>
     <a href="/videos">View all</a>
   </div>
-  <div class="video-grid">
-    {% for video in long_videos[:8] %}
-    <article class="video-card">
-      <a href="/watch/{{ video.id }}" class="poster wide">
-        {% include "_poster.html" %}
-        <span class="play-chip"><i data-lucide="play"></i></span>
-      </a>
-      <h3>{{ video.title }}</h3>
-      <p>{{ video.playlist.name if video.playlist else "General playlist" }}</p>
-    </article>
-    {% else %}
-    <div class="empty">No long videos uploaded yet.</div>
-    {% endfor %}
+  {% if long_videos %}
+  <div class="rail-shell" data-rail-shell>
+    <button class="rail-arrow rail-arrow-left" type="button" aria-label="Previous videos" data-rail-prev>
+      <i data-lucide="chevron-left"></i>
+    </button>
+    <div class="video-rail" data-rail-track>
+      {% for video in long_videos %}
+      <article class="video-card">
+        <a href="/watch/{{ video.id }}" class="poster wide">
+          {% include "_poster.html" %}
+          <span class="play-chip"><i data-lucide="play"></i></span>
+        </a>
+        <h3>{{ video.title }}</h3>
+        <p>{{ video.playlist.name if video.playlist else "General playlist" }}</p>
+      </article>
+      {% endfor %}
+    </div>
+    <button class="rail-arrow rail-arrow-right" type="button" aria-label="Next videos" data-rail-next>
+      <i data-lucide="chevron-right"></i>
+    </button>
   </div>
+  {% else %}
+  <div class="empty">No long videos uploaded yet.</div>
+  {% endif %}
 </section>
 
 {% endblock %}

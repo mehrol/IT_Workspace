@@ -8,19 +8,29 @@
 </section>
 
 <section class="section">
-  <div class="shorts-rail wrap">
-    {% for video in shorts %}
-    <article class="short-card">
-      <a href="/watch/{{ video.id }}" class="poster tall">
-        {% include "_poster.html" %}
-        <span class="play-chip"><i data-lucide="play"></i></span>
-      </a>
-      <h3>{{ video.title }}</h3>
-      <p>{{ video.category.name if video.category else "Tech" }}</p>
-    </article>
-    {% else %}
-    <div class="empty">No shorts matched your search.</div>
-    {% endfor %}
+  {% if shorts %}
+  <div class="rail-shell" data-rail-shell>
+    <button class="rail-arrow rail-arrow-left" type="button" aria-label="Previous shorts" data-rail-prev>
+      <i data-lucide="chevron-left"></i>
+    </button>
+    <div class="shorts-rail" data-rail-track>
+      {% for video in shorts %}
+      <article class="short-card">
+        <a href="/watch/{{ video.id }}" class="poster tall">
+          {% include "_poster.html" %}
+          <span class="play-chip"><i data-lucide="play"></i></span>
+        </a>
+        <h3>{{ video.title }}</h3>
+        <p>{{ video.category.name if video.category else "Tech" }}</p>
+      </article>
+      {% endfor %}
+    </div>
+    <button class="rail-arrow rail-arrow-right" type="button" aria-label="Next shorts" data-rail-next>
+      <i data-lucide="chevron-right"></i>
+    </button>
   </div>
+  {% else %}
+  <div class="empty">No shorts matched your search.</div>
+  {% endif %}
 </section>
 {% endblock %}

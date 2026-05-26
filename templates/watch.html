@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ video.title }}{% endblock %}
 {% block content %}
-<section class="watch-layout">
+<section class="watch-layout {{ 'short-watch' if video.video_type == 'short' else '' }}">
   <article class="watch-main">
     <div class="player-shell" id="player-shell">
 
@@ -11,17 +11,44 @@
           id="main-video"
           class="video-player {{ 'vertical' if video.video_type == 'short' else '' }}"
           playsinline
+          {{ 'autoplay muted' if video.video_type == 'short' else '' }}
           data-video-type="{{ video.video_type }}"
           data-next-url="{{ '/watch/' ~ next_video.id if next_video else '' }}"
           poster="{{ video.poster_path|media_url if video.poster_path else '' }}"
           data-hls="{{ video.direct_play_url if video.direct_play_url.endswith('.m3u8') else '' }}"
           src="{{ video.direct_play_url if not video.direct_play_url.endswith('.m3u8') else '' }}">
+          {% if video.video_type == "long" and video.caption_path %}
+          <track kind="subtitles" src="{{ video.caption_path|media_url }}" srclang="en" label="English">
+          {% endif %}
         </video>
 
         {% if video.video_type == "short" %}
-        <button class="video-play-overlay" id="short-overlay" type="button" aria-label="Play">
+        <button class="video-play-overlay short-gesture-layer" id="short-overlay" type="button" aria-label="Pause or play short">
           <i data-lucide="play"></i>
         </button>
+        <div class="short-video-overlay">
+          <div class="short-video-copy">
+            <h1>{{ video.title }}</h1>
+            {% if video.description %}
+            <p class="compact-description" data-description-collapsible>{{ video.description }}</p>
+            <button class="description-toggle" type="button" data-description-toggle hidden>More</button>
+            {% endif %}
+          </div>
+          <div class="short-video-actions">
+            <form method="post" action="/videos/{{ video.id }}/like">
+              <button class="short-action-button" type="submit" aria-label="Like"><i data-lucide="thumbs-up"></i><span>{{ like_count }}</span></button>
+            </form>
+            <button
+              class="short-action-button"
+              type="button"
+              aria-label="Share"
+              data-share
+              data-share-url="{{ request.url_for('watch', video_id=video.id) }}"
+              data-share-title="{{ video.title }}">
+              <i data-lucide="share-2"></i><span>Share</span>
+            </button>
+          </div>
+        </div>
         {% if next_video %}
         <button class="short-skip-button" id="short-next" type="button" aria-label="Next clip">
           <i data-lucide="skip-forward"></i>
@@ -36,45 +63,52 @@
               <div class="yt-scrub-thumb" id="yt-scrub-thumb"></div>
             </div>
           </div>
-          <div class="yt-bottom-row">
+          <div class="yt-bottom-row" role="group" aria-label="Video controls">
             <div class="yt-left">
-              <button class="yt-btn" id="yt-play" title="Play (k)"><i data-lucide="play" id="yt-icon-play"></i><i data-lucide="pause" id="yt-icon-pause" style="display:none"></i></button>
-              <button class="yt-btn" id="yt-rew" title="Rewind 10s (j)"><i data-lucide="rewind"></i></button>
-              <button class="yt-btn" id="yt-fwd" title="Forward 10s (l)"><i data-lucide="fast-forward"></i></button>
+              <button class="yt-btn" id="yt-play" type="button" title="Play (k)" aria-label="Play"><i class="fa-solid fa-play" id="yt-icon-play"></i><i class="fa-solid fa-pause" id="yt-icon-pause" style="display:none"></i></button>
+              <button class="yt-btn yt-skip" id="yt-rew" type="button" title="Rewind 10s (j)" aria-label="Rewind 10 seconds"><i class="fa-solid fa-backward"></i></button>
+              <button class="yt-btn yt-skip" id="yt-fwd" type="button" title="Forward 10s (l)" aria-label="Forward 10 seconds"><i class="fa-solid fa-forward"></i></button>
               {% if next_video %}
-              <a class="yt-btn" href="/watch/{{ next_video.id }}" title="Next video"><i data-lucide="skip-forward"></i></a>
+              <a class="yt-btn" href="/watch/{{ next_video.id }}" title="Next video" aria-label="Next video"><i class="fa-solid fa-forward-step"></i></a>
               {% endif %}
               <div class="yt-vol-group">
-                <button class="yt-btn" id="yt-mute" title="Mute (m)"><i data-lucide="volume-2" id="yt-icon-vol-on"></i><i data-lucide="volume-x" id="yt-icon-vol-off" style="display:none"></i></button>
-                <input class="yt-vol-slider" id="yt-vol" type="range" min="0" max="1" step="0.05" value="1">
+                <button class="yt-btn" id="yt-mute" type="button" title="Mute (m)" aria-label="Mute"><i class="fa-solid fa-volume-high" id="yt-icon-vol-on"></i><i class="fa-solid fa-volume-xmark" id="yt-icon-vol-off" style="display:none"></i></button>
+                <input class="yt-vol-slider" id="yt-vol" type="range" min="0" max="1" step="0.05" value="1" aria-label="Volume">
               </div>
               <span class="yt-time" id="yt-time">0:00 / 0:00</span>
             </div>
             <div class="yt-right">
-              {% if video.caption_path %}
-              <button class="yt-btn yt-text-btn" id="yt-cc" title="Subtitles (c)">CC</button>
-              {% endif %}
+              <button class="yt-btn yt-text-btn" id="yt-cc" type="button" title="Subtitles (c)" aria-label="Closed captions">CC</button>
+              <button class="yt-btn yt-hd-btn" id="yt-hd" type="button" title="HD quality" aria-label="HD quality">HD</button>
+              <button class="yt-btn" id="yt-settings" type="button" title="Settings" aria-label="Settings"><i class="fa-solid fa-gear"></i></button>
+              <button class="yt-btn" id="yt-pip" type="button" title="Mini player (i)" aria-label="Picture in picture"><i class="fa-regular fa-clone"></i></button>
+              <button class="yt-btn" id="yt-theater" type="button" title="Theater mode (t)" aria-label="Theater mode"><i class="fa-solid fa-tv"></i></button>
+              <button class="yt-btn" id="yt-fs" type="button" title="Fullscreen (f)" aria-label="Fullscreen"><i class="fa-solid fa-expand" id="yt-icon-fs-on"></i><i class="fa-solid fa-compress" id="yt-icon-fs-off" style="display:none"></i></button>
+            </div>
+          </div>
+          <div class="yt-settings-panel" id="yt-settings-panel" hidden>
+            <label>Speed
               <select class="yt-select" id="yt-speed" title="Speed">
-                <option value="0.25">0.25×</option>
-                <option value="0.5">0.5×</option>
-                <option value="0.75">0.75×</option>
+                <option value="0.25">0.25x</option>
+                <option value="0.5">0.5x</option>
+                <option value="0.75">0.75x</option>
                 <option value="1" selected>Normal</option>
-                <option value="1.25">1.25×</option>
-                <option value="1.5">1.5×</option>
-                <option value="2">2×</option>
+                <option value="1.25">1.25x</option>
+                <option value="1.5">1.5x</option>
+                <option value="2">2x</option>
               </select>
+            </label>
+            <label>Quality
               <select class="yt-select" id="yt-quality" title="Quality">
                 <option value="auto">Auto</option>
                 <option value="480">480p</option>
-                <option value="720">720p</option>
-                <option value="1080">1080p</option>
+                <option value="720">720p HD</option>
+                <option value="1080">1080p HD</option>
               </select>
-              <button class="yt-btn" id="yt-pip" title="Mini player (i)"><i data-lucide="picture-in-picture-2"></i></button>
-              <button class="yt-btn" id="yt-fs" title="Fullscreen (f)"><i data-lucide="maximize" id="yt-icon-fs-on"></i><i data-lucide="minimize" id="yt-icon-fs-off" style="display:none"></i></button>
-            </div>
+            </label>
           </div>
         </div>
-        <div class="yt-big-play" id="yt-big-play"><i data-lucide="play"></i></div>
+        <button class="yt-big-play" id="yt-big-play" type="button" aria-label="Play"><i class="fa-solid fa-play"></i></button>
         {% endif %}
       </div>
 
@@ -83,13 +117,94 @@
         <iframe
           id="external-player-{{ video.id }}"
           class="embed-player {{ 'vertical' if video.video_type == 'short' else '' }}"
-          src="{{ video.embed_url }}"
+          src="{{ video.embed_url }}{{ '&autoplay=1&mute=1' if video.video_type == 'short' and video.external_platform == 'youtube' else '' }}"
           title="{{ video.title }}"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
           allowfullscreen
           data-platform="{{ video.external_platform or 'external' }}"
+          data-video-type="{{ video.video_type }}"
           data-next-url="{{ '/watch/' ~ next_video.id if next_video else '' }}">
         </iframe>
+        {% if video.video_type == "short" and video.external_platform == "youtube" %}
+        <button class="short-embed-gesture-layer" type="button" aria-label="Pause or play short" data-short-embed-toggle data-next-url="{{ '/watch/' ~ next_video.id if next_video else '' }}"></button>
+        <div class="short-video-overlay">
+          <div class="short-video-copy">
+            <h1>{{ video.title }}</h1>
+            {% if video.description %}
+            <p class="compact-description" data-description-collapsible>{{ video.description }}</p>
+            <button class="description-toggle" type="button" data-description-toggle hidden>More</button>
+            {% endif %}
+          </div>
+          <div class="short-video-actions">
+            <form method="post" action="/videos/{{ video.id }}/like">
+              <button class="short-action-button" type="submit" aria-label="Like"><i data-lucide="thumbs-up"></i><span>{{ like_count }}</span></button>
+            </form>
+            <button
+              class="short-action-button"
+              type="button"
+              aria-label="Share"
+              data-share
+              data-share-url="{{ request.url_for('watch', video_id=video.id) }}"
+              data-share-title="{{ video.title }}">
+              <i data-lucide="share-2"></i><span>Share</span>
+            </button>
+          </div>
+        </div>
+        {% elif video.external_platform == "youtube" %}
+        <div class="yt-controls" id="yt-controls">
+          <div class="yt-progress-area" id="yt-progress-area">
+            <div class="yt-progress-bar" id="yt-progress-bar">
+              <div class="yt-buf-bar" id="yt-buf-bar"></div>
+              <div class="yt-fill-bar" id="yt-fill-bar"></div>
+              <div class="yt-scrub-thumb" id="yt-scrub-thumb"></div>
+            </div>
+          </div>
+          <div class="yt-bottom-row" role="group" aria-label="Video controls">
+            <div class="yt-left">
+              <button class="yt-btn" id="yt-play" type="button" title="Play (k)" aria-label="Play"><i class="fa-solid fa-play" id="yt-icon-play"></i><i class="fa-solid fa-pause" id="yt-icon-pause" style="display:none"></i></button>
+              <button class="yt-btn yt-skip" id="yt-rew" type="button" title="Rewind 10s (j)" aria-label="Rewind 10 seconds"><i class="fa-solid fa-backward"></i></button>
+              <button class="yt-btn yt-skip" id="yt-fwd" type="button" title="Forward 10s (l)" aria-label="Forward 10 seconds"><i class="fa-solid fa-forward"></i></button>
+              {% if next_video %}
+              <a class="yt-btn" href="/watch/{{ next_video.id }}" title="Next video" aria-label="Next video"><i class="fa-solid fa-forward-step"></i></a>
+              {% endif %}
+              <div class="yt-vol-group">
+                <button class="yt-btn" id="yt-mute" type="button" title="Mute (m)" aria-label="Mute"><i class="fa-solid fa-volume-high" id="yt-icon-vol-on"></i><i class="fa-solid fa-volume-xmark" id="yt-icon-vol-off" style="display:none"></i></button>
+                <input class="yt-vol-slider" id="yt-vol" type="range" min="0" max="100" step="5" value="100" aria-label="Volume">
+              </div>
+              <span class="yt-time" id="yt-time">0:00 / 0:00</span>
+            </div>
+            <div class="yt-right">
+              <button class="yt-btn yt-text-btn" id="yt-cc" type="button" title="Subtitles (c)" aria-label="Closed captions">CC</button>
+              <button class="yt-btn yt-hd-btn active" id="yt-hd" type="button" title="HD quality" aria-label="HD quality">HD</button>
+              <button class="yt-btn" id="yt-settings" type="button" title="Settings" aria-label="Settings"><i class="fa-solid fa-gear"></i></button>
+              <button class="yt-btn" id="yt-theater" type="button" title="Theater mode (t)" aria-label="Theater mode"><i class="fa-solid fa-tv"></i></button>
+              <button class="yt-btn" id="yt-fs" type="button" title="Fullscreen (f)" aria-label="Fullscreen"><i class="fa-solid fa-expand" id="yt-icon-fs-on"></i><i class="fa-solid fa-compress" id="yt-icon-fs-off" style="display:none"></i></button>
+            </div>
+          </div>
+          <div class="yt-settings-panel" id="yt-settings-panel" hidden>
+            <label>Speed
+              <select class="yt-select" id="yt-speed" title="Speed">
+                <option value="0.25">0.25x</option>
+                <option value="0.5">0.5x</option>
+                <option value="0.75">0.75x</option>
+                <option value="1" selected>Normal</option>
+                <option value="1.25">1.25x</option>
+                <option value="1.5">1.5x</option>
+                <option value="2">2x</option>
+              </select>
+            </label>
+            <label>Quality
+              <select class="yt-select" id="yt-quality" title="Quality">
+                <option value="auto">Auto</option>
+                <option value="hd720">720p HD</option>
+                <option value="hd1080">1080p HD</option>
+                <option value="highres">Best</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <button class="yt-big-play" id="yt-big-play" type="button" aria-label="Play"><i class="fa-solid fa-play"></i></button>
+        {% endif %}
       </div>
 
       {% else %}
@@ -98,6 +213,7 @@
           id="main-video"
           class="video-player {{ 'vertical' if video.video_type == 'short' else '' }}"
           playsinline
+          {{ 'autoplay muted' if video.video_type == 'short' else '' }}
           data-video-type="{{ video.video_type }}"
           data-next-url="{{ '/watch/' ~ next_video.id if next_video else '' }}"
           poster="{{ video.poster_path|media_url if video.poster_path else '' }}"
@@ -109,9 +225,32 @@
         </video>
 
         {% if video.video_type == "short" %}
-        <button class="video-play-overlay" id="short-overlay" type="button" aria-label="Play">
+        <button class="video-play-overlay short-gesture-layer" id="short-overlay" type="button" aria-label="Pause or play short">
           <i data-lucide="play"></i>
         </button>
+        <div class="short-video-overlay">
+          <div class="short-video-copy">
+            <h1>{{ video.title }}</h1>
+            {% if video.description %}
+            <p class="compact-description" data-description-collapsible>{{ video.description }}</p>
+            <button class="description-toggle" type="button" data-description-toggle hidden>More</button>
+            {% endif %}
+          </div>
+          <div class="short-video-actions">
+            <form method="post" action="/videos/{{ video.id }}/like">
+              <button class="short-action-button" type="submit" aria-label="Like"><i data-lucide="thumbs-up"></i><span>{{ like_count }}</span></button>
+            </form>
+            <button
+              class="short-action-button"
+              type="button"
+              aria-label="Share"
+              data-share
+              data-share-url="{{ request.url_for('watch', video_id=video.id) }}"
+              data-share-title="{{ video.title }}">
+              <i data-lucide="share-2"></i><span>Share</span>
+            </button>
+          </div>
+        </div>
         {% if next_video %}
         <button class="short-skip-button" id="short-next" type="button" aria-label="Next clip">
           <i data-lucide="skip-forward"></i>
@@ -126,61 +265,64 @@
               <div class="yt-scrub-thumb" id="yt-scrub-thumb"></div>
             </div>
           </div>
-          <div class="yt-bottom-row">
+          <div class="yt-bottom-row" role="group" aria-label="Video controls">
             <div class="yt-left">
-              <button class="yt-btn" id="yt-play" title="Play (k)"><i data-lucide="play" id="yt-icon-play"></i><i data-lucide="pause" id="yt-icon-pause" style="display:none"></i></button>
-              <button class="yt-btn" id="yt-rew" title="Rewind 10s (j)"><i data-lucide="rewind"></i></button>
-              <button class="yt-btn" id="yt-fwd" title="Forward 10s (l)"><i data-lucide="fast-forward"></i></button>
+              <button class="yt-btn" id="yt-play" type="button" title="Play (k)" aria-label="Play"><i class="fa-solid fa-play" id="yt-icon-play"></i><i class="fa-solid fa-pause" id="yt-icon-pause" style="display:none"></i></button>
+              <button class="yt-btn yt-skip" id="yt-rew" type="button" title="Rewind 10s (j)" aria-label="Rewind 10 seconds"><i class="fa-solid fa-backward"></i></button>
+              <button class="yt-btn yt-skip" id="yt-fwd" type="button" title="Forward 10s (l)" aria-label="Forward 10 seconds"><i class="fa-solid fa-forward"></i></button>
               {% if next_video %}
-              <a class="yt-btn" href="/watch/{{ next_video.id }}" title="Next video"><i data-lucide="skip-forward"></i></a>
+              <a class="yt-btn" href="/watch/{{ next_video.id }}" title="Next video" aria-label="Next video"><i class="fa-solid fa-forward-step"></i></a>
               {% endif %}
               <div class="yt-vol-group">
-                <button class="yt-btn" id="yt-mute" title="Mute (m)"><i data-lucide="volume-2" id="yt-icon-vol-on"></i><i data-lucide="volume-x" id="yt-icon-vol-off" style="display:none"></i></button>
-                <input class="yt-vol-slider" id="yt-vol" type="range" min="0" max="1" step="0.05" value="1">
+                <button class="yt-btn" id="yt-mute" type="button" title="Mute (m)" aria-label="Mute"><i class="fa-solid fa-volume-high" id="yt-icon-vol-on"></i><i class="fa-solid fa-volume-xmark" id="yt-icon-vol-off" style="display:none"></i></button>
+                <input class="yt-vol-slider" id="yt-vol" type="range" min="0" max="1" step="0.05" value="1" aria-label="Volume">
               </div>
               <span class="yt-time" id="yt-time">0:00 / 0:00</span>
             </div>
             <div class="yt-right">
-              {% if video.caption_path %}
-              <button class="yt-btn yt-text-btn" id="yt-cc" title="Subtitles (c)">CC</button>
-              {% endif %}
+              <button class="yt-btn yt-text-btn" id="yt-cc" type="button" title="Subtitles (c)" aria-label="Closed captions">CC</button>
+              <button class="yt-btn yt-hd-btn" id="yt-hd" type="button" title="HD quality" aria-label="HD quality">HD</button>
+              <button class="yt-btn" id="yt-settings" type="button" title="Settings" aria-label="Settings"><i class="fa-solid fa-gear"></i></button>
+              <button class="yt-btn" id="yt-pip" type="button" title="Mini player (i)" aria-label="Picture in picture"><i class="fa-regular fa-clone"></i></button>
+              <button class="yt-btn" id="yt-theater" type="button" title="Theater mode (t)" aria-label="Theater mode"><i class="fa-solid fa-tv"></i></button>
+              <button class="yt-btn" id="yt-fs" type="button" title="Fullscreen (f)" aria-label="Fullscreen"><i class="fa-solid fa-expand" id="yt-icon-fs-on"></i><i class="fa-solid fa-compress" id="yt-icon-fs-off" style="display:none"></i></button>
+            </div>
+          </div>
+          <div class="yt-settings-panel" id="yt-settings-panel" hidden>
+            <label>Speed
               <select class="yt-select" id="yt-speed" title="Speed">
-                <option value="0.25">0.25×</option>
-                <option value="0.5">0.5×</option>
-                <option value="0.75">0.75×</option>
+                <option value="0.25">0.25x</option>
+                <option value="0.5">0.5x</option>
+                <option value="0.75">0.75x</option>
                 <option value="1" selected>Normal</option>
-                <option value="1.25">1.25×</option>
-                <option value="1.5">1.5×</option>
-                <option value="2">2×</option>
+                <option value="1.25">1.25x</option>
+                <option value="1.5">1.5x</option>
+                <option value="2">2x</option>
               </select>
+            </label>
+            <label>Quality
               <select class="yt-select" id="yt-quality" title="Quality">
                 <option value="auto">Auto</option>
                 <option value="480">480p</option>
-                <option value="720">720p</option>
-                <option value="1080">1080p</option>
+                <option value="720">720p HD</option>
+                <option value="1080">1080p HD</option>
               </select>
-              <button class="yt-btn" id="yt-pip" title="Mini player (i)"><i data-lucide="picture-in-picture-2"></i></button>
-              <button class="yt-btn" id="yt-fs" title="Fullscreen (f)"><i data-lucide="maximize" id="yt-icon-fs-on"></i><i data-lucide="minimize" id="yt-icon-fs-off" style="display:none"></i></button>
-            </div>
+            </label>
           </div>
         </div>
-        <div class="yt-big-play" id="yt-big-play"><i data-lucide="play"></i></div>
+        <button class="yt-big-play" id="yt-big-play" type="button" aria-label="Play"><i class="fa-solid fa-play"></i></button>
         {% endif %}
-      </div>
-      {% endif %}
-
-      {% if video.video_type == "short" and next_video %}
-      <div class="quality-bar">
-        <a class="button ghost" href="/watch/{{ next_video.id }}">Move Forward <i data-lucide="arrow-right"></i></a>
       </div>
       {% endif %}
 
     </div>
 
+    {% if video.video_type != "short" %}
     <div class="watch-meta">
       <div>
         <h1>{{ video.title }}</h1>
-        <p>{{ video.description }}</p>
+        <p class="compact-description watch-description" data-description-collapsible>{{ video.description or "" }}</p>
+        <button class="description-toggle" type="button" data-description-toggle hidden>More</button>
       </div>
       <div class="actions">
         <form method="post" action="/videos/{{ video.id }}/like">
@@ -213,8 +355,10 @@
       <div class="empty">No comments yet.</div>
       {% endfor %}
     </section>
+    {% endif %}
   </article>
 
+  {% if video.video_type != "short" %}
   <aside class="related">
     <h2>Related</h2>
     {% for item in related %}
@@ -227,5 +371,6 @@
     </a>
     {% endfor %}
   </aside>
+  {% endif %}
 </section>
 {% endblock %}

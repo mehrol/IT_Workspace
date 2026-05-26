@@ -8,10 +8,10 @@
   </div>
 
   <div class="admin-stats">
-    <span>{{ videos | selectattr("video_type", "equalto", "short") | list | length }} shorts</span>
-    <span>{{ videos | selectattr("video_type", "equalto", "long") | list | length }} long videos</span>
-    <span>{{ channels|length }} channels</span>
-    <span>{{ freelancers|length }} freelancers</span>
+    <span>{{ all_videos | selectattr("video_type", "equalto", "short") | list | length }} shorts</span>
+    <span>{{ all_videos | selectattr("video_type", "equalto", "long") | list | length }} long videos</span>
+    <span>{{ all_channels|length }} channels</span>
+    <span>{{ all_freelancers|length }} freelancers</span>
   </div>
 
   <div class="studio-picker">
@@ -97,67 +97,239 @@
   </div>
 
   <section class="section flush">
-    <h2>Linked Videos</h2>
-    <div class="table-list">
-      {% for video in videos %}
+    <div class="admin-video-head">
       <div>
-        <strong>{{ video.title }}</strong>
-        <span>{{ video.video_type }} - linked</span>
-        <div class="admin-actions">
-          <a class="button ghost" href="/watch/{{ video.id }}">View</a>
-          <form method="post" action="/admin/videos/{{ video.id }}/delete" onsubmit="return confirm('Delete this video?');">
-            <button class="button danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
-          </form>
-        </div>
+        <h2>Linked Videos</h2>
+        <span>{{ video_total }} result{{ '' if video_total == 1 else 's' }} · showing 5 per page</span>
       </div>
+      <form class="admin-video-search" method="get" action="/admin">
+        <input name="video_q" value="{{ video_q }}" placeholder="Search videos to edit">
+        <button class="button primary" type="submit"><i data-lucide="search"></i> Search</button>
+        {% if video_q %}
+        <a class="button ghost" href="/admin">Clear</a>
+        {% endif %}
+      </form>
+    </div>
+
+    <div class="table-list video-manager">
+      {% for video in videos %}
+      <article class="admin-video-row">
+        <div class="admin-video-summary">
+          <div>
+            <strong>{{ video.title }}</strong>
+            <p class="compact-description" data-description-collapsible>{{ video.description or "No description added." }}</p>
+            <button class="description-toggle" type="button" data-description-toggle hidden>More</button>
+          </div>
+          <span>{{ video.video_type }} - {{ video.external_platform or "linked" }}</span>
+          <div class="admin-actions">
+            <a class="button ghost" href="/watch/{{ video.id }}">View</a>
+            <button class="button ghost" type="button" data-edit-toggle>Edit</button>
+            <form method="post" action="/admin/videos/{{ video.id }}/delete" onsubmit="return confirm('Delete this video?');">
+              <button class="button danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+            </form>
+          </div>
+        </div>
+        <form class="admin-edit-form" method="post" action="/admin/videos/{{ video.id }}/edit" enctype="multipart/form-data" data-edit-form hidden>
+          <input type="hidden" name="next_url" value="/admin?video_q={{ video_q | urlencode }}&video_page={{ video_page }}">
+          <div class="two-col">
+            <input name="title" value="{{ video.title }}" placeholder="Video title" required>
+            <select name="video_type" required>
+              <option value="short" {{ "selected" if video.video_type == "short" else "" }}>Short</option>
+              <option value="long" {{ "selected" if video.video_type == "long" else "" }}>Long video</option>
+            </select>
+          </div>
+          <input name="video_url" type="url" value="{{ video.source_url or video.source_path }}" placeholder="Reference URL" required>
+          <input name="direct_play_url" type="url" value="{{ video.direct_play_url or '' }}" placeholder="Direct .mp4, .webm, .ogg, .mov, or .m3u8 URL">
+          <textarea name="description" placeholder="Description">{{ video.description or "" }}</textarea>
+          <input name="keywords" value="{{ video.keywords or '' }}" placeholder="Keywords, comma separated">
+          <div class="two-col">
+            <input name="category" value="{{ video.category.name if video.category else '' }}" placeholder="Category">
+            <input name="playlist" value="{{ video.playlist.name if video.playlist else '' }}" placeholder="Playlist for long videos">
+          </div>
+          <label class="file-box">Replace poster image<input name="poster" type="file" accept="image/*"></label>
+          <div class="admin-actions">
+            <button class="button primary" type="submit"><i data-lucide="save"></i> Save Changes</button>
+            <button class="button ghost" type="button" data-edit-close>Cancel</button>
+          </div>
+        </form>
+      </article>
       {% else %}
       <div class="empty">No video links added yet.</div>
       {% endfor %}
     </div>
+
+    {% if video_total_pages > 1 %}
+    <nav class="pagination" aria-label="Video pages">
+      {% if video_page > 1 %}
+      <a class="button ghost" href="/admin?video_q={{ video_q | urlencode }}&video_page={{ video_page - 1 }}">Previous</a>
+      {% endif %}
+      <span>Page {{ video_page }} of {{ video_total_pages }}</span>
+      {% if video_page < video_total_pages %}
+      <a class="button ghost" href="/admin?video_q={{ video_q | urlencode }}&video_page={{ video_page + 1 }}">Next</a>
+      {% endif %}
+    </nav>
+    {% endif %}
   </section>
 
   <section class="section flush">
-    <h2>Channels</h2>
-    <div class="table-list">
-      {% for channel in channels %}
+    <div class="admin-video-head">
       <div>
-        <strong>{{ channel.name }}</strong>
-        <span>{{ "Active" if channel.is_active else "Hidden" }}</span>
-        <div class="admin-actions">
-          <form method="post" action="/admin/channels/{{ channel.id }}/toggle">
-            <button class="button ghost" type="submit">Toggle</button>
-          </form>
-          <form method="post" action="/admin/channels/{{ channel.id }}/delete" onsubmit="return confirm('Delete this channel?');">
-            <button class="button danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
-          </form>
-        </div>
+        <h2>Channels</h2>
+        <span>{{ channel_total }} result{{ '' if channel_total == 1 else 's' }} · showing 5 per page</span>
       </div>
+      <form class="admin-video-search" method="get" action="/admin">
+        <input type="hidden" name="video_q" value="{{ video_q }}">
+        <input type="hidden" name="video_page" value="{{ video_page }}">
+        <input type="hidden" name="freelancer_q" value="{{ freelancer_q }}">
+        <input type="hidden" name="freelancer_page" value="{{ freelancer_page }}">
+        <input name="channel_q" value="{{ channel_q }}" placeholder="Search channels">
+        <button class="button primary" type="submit"><i data-lucide="search"></i> Search</button>
+        {% if channel_q %}
+        <a class="button ghost" href="/admin?video_q={{ video_q | urlencode }}&video_page={{ video_page }}&freelancer_q={{ freelancer_q | urlencode }}&freelancer_page={{ freelancer_page }}">Clear</a>
+        {% endif %}
+      </form>
+    </div>
+    <div class="table-list video-manager">
+      {% for channel in channels %}
+      <article class="admin-video-row">
+        <div class="admin-video-summary">
+          <div>
+            <strong>{{ channel.name }}</strong>
+            <p class="compact-description" data-description-collapsible>{{ channel.url }}</p>
+            <button class="description-toggle" type="button" data-description-toggle hidden>More</button>
+          </div>
+          <span>{{ "Active" if channel.is_active else "Hidden" }}</span>
+          <div class="admin-actions">
+            <form method="post" action="/admin/channels/{{ channel.id }}/toggle">
+              <button class="button ghost" type="submit">Toggle</button>
+            </form>
+            <button class="button ghost" type="button" data-edit-toggle>Edit</button>
+            <form method="post" action="/admin/channels/{{ channel.id }}/delete" onsubmit="return confirm('Delete this channel?');">
+              <button class="button danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+            </form>
+          </div>
+        </div>
+        <form class="admin-edit-form" method="post" action="/admin/channels/{{ channel.id }}/edit" enctype="multipart/form-data" data-edit-form hidden>
+          <input type="hidden" name="next_url" value="/admin?video_q={{ video_q | urlencode }}&video_page={{ video_page }}&channel_q={{ channel_q | urlencode }}&channel_page={{ channel_page }}&freelancer_q={{ freelancer_q | urlencode }}&freelancer_page={{ freelancer_page }}">
+          <div class="two-col">
+            <input name="name" value="{{ channel.name }}" placeholder="Channel name" required>
+            <select name="icon">
+              <option value="instagram" {{ "selected" if channel.icon == "instagram" else "" }}>Instagram</option>
+              <option value="linkedin" {{ "selected" if channel.icon == "linkedin" else "" }}>LinkedIn</option>
+              <option value="play-square" {{ "selected" if channel.icon == "play-square" else "" }}>Video</option>
+              <option value="briefcase-business" {{ "selected" if channel.icon == "briefcase-business" else "" }}>Portfolio</option>
+              <option value="user" {{ "selected" if channel.icon == "user" else "" }}>Profile</option>
+            </select>
+          </div>
+          <input name="url" type="url" value="{{ channel.url }}" placeholder="Channel URL" required>
+          <label class="file-box">Replace channel image<input name="image" type="file" accept="image/*"></label>
+          <div class="admin-actions">
+            <button class="button primary" type="submit"><i data-lucide="save"></i> Save Changes</button>
+            <button class="button ghost" type="button" data-edit-close>Cancel</button>
+          </div>
+        </form>
+      </article>
       {% else %}
       <div class="empty">No channels added yet.</div>
       {% endfor %}
     </div>
+    {% if channel_total_pages > 1 %}
+    <nav class="pagination" aria-label="Channel pages">
+      {% if channel_page > 1 %}
+      <a class="button ghost" href="/admin?video_q={{ video_q | urlencode }}&video_page={{ video_page }}&channel_q={{ channel_q | urlencode }}&channel_page={{ channel_page - 1 }}&freelancer_q={{ freelancer_q | urlencode }}&freelancer_page={{ freelancer_page }}">Previous</a>
+      {% endif %}
+      <span>Page {{ channel_page }} of {{ channel_total_pages }}</span>
+      {% if channel_page < channel_total_pages %}
+      <a class="button ghost" href="/admin?video_q={{ video_q | urlencode }}&video_page={{ video_page }}&channel_q={{ channel_q | urlencode }}&channel_page={{ channel_page + 1 }}&freelancer_q={{ freelancer_q | urlencode }}&freelancer_page={{ freelancer_page }}">Next</a>
+      {% endif %}
+    </nav>
+    {% endif %}
   </section>
 
   <section class="section flush">
-    <h2>Freelancer Profiles</h2>
-    <div class="table-list">
-      {% for profile in freelancers %}
+    <div class="admin-video-head">
       <div>
-        <strong>{{ profile.name }}</strong>
+        <h2>Freelancer Profiles</h2>
+        <span>{{ freelancer_total }} result{{ '' if freelancer_total == 1 else 's' }} · showing 5 per page</span>
+      </div>
+      <form class="admin-video-search" method="get" action="/admin">
+        <input type="hidden" name="video_q" value="{{ video_q }}">
+        <input type="hidden" name="video_page" value="{{ video_page }}">
+        <input type="hidden" name="channel_q" value="{{ channel_q }}">
+        <input type="hidden" name="channel_page" value="{{ channel_page }}">
+        <input name="freelancer_q" value="{{ freelancer_q }}" placeholder="Search freelancer profiles">
+        <button class="button primary" type="submit"><i data-lucide="search"></i> Search</button>
+        {% if freelancer_q %}
+        <a class="button ghost" href="/admin?video_q={{ video_q | urlencode }}&video_page={{ video_page }}&channel_q={{ channel_q | urlencode }}&channel_page={{ channel_page }}">Clear</a>
+        {% endif %}
+      </form>
+    </div>
+    <div class="table-list video-manager">
+      {% for profile in freelancers %}
+      <article class="admin-video-row">
+        <div class="admin-video-summary">
+          <div>
+            <strong>{{ profile.name }}</strong>
+            <p class="compact-description" data-description-collapsible>{{ profile.role }} · {{ profile.skills or "No skills added." }}</p>
+            <button class="description-toggle" type="button" data-description-toggle hidden>More</button>
+          </div>
         <span>{{ profile.domain }} · {{ "Active" if profile.is_active else "Hidden" }}</span>
-        <div class="admin-actions">
+          <div class="admin-actions">
           <form method="post" action="/admin/freelancers/{{ profile.id }}/toggle">
             <button class="button ghost" type="submit">Toggle</button>
           </form>
+          <button class="button ghost" type="button" data-edit-toggle>Edit</button>
           <form method="post" action="/admin/freelancers/{{ profile.id }}/delete" onsubmit="return confirm('Delete this freelancer profile?');">
             <button class="button danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
           </form>
+          </div>
         </div>
-      </div>
+        <form class="admin-edit-form" method="post" action="/admin/freelancers/{{ profile.id }}/edit" enctype="multipart/form-data" data-edit-form hidden>
+          <input type="hidden" name="next_url" value="/admin?video_q={{ video_q | urlencode }}&video_page={{ video_page }}&channel_q={{ channel_q | urlencode }}&channel_page={{ channel_page }}&freelancer_q={{ freelancer_q | urlencode }}&freelancer_page={{ freelancer_page }}">
+          <div class="two-col">
+            <input name="name" value="{{ profile.name }}" placeholder="Full name" required>
+            <input name="role" value="{{ profile.role }}" placeholder="Role" required>
+          </div>
+          <div class="two-col">
+            <select name="domain" required>
+              <option value="Tech" {{ "selected" if profile.domain|lower == "tech" else "" }}>Tech</option>
+              <option value="Design" {{ "selected" if profile.domain|lower == "design" else "" }}>Design</option>
+            </select>
+            <input name="experience" value="{{ profile.experience or '' }}" placeholder="Experience">
+          </div>
+          <input name="location" value="{{ profile.location or '' }}" placeholder="Location">
+          <input name="skills" value="{{ profile.skills or '' }}" placeholder="Skills, comma separated">
+          <textarea name="bio" placeholder="Profile summary and job details">{{ profile.bio or "" }}</textarea>
+          <div class="two-col">
+            <input name="email" type="email" value="{{ profile.email or '' }}" placeholder="Email">
+            <input name="phone" value="{{ profile.phone or '' }}" placeholder="Phone">
+          </div>
+          <input name="portfolio_url" type="url" value="{{ profile.portfolio_url or '' }}" placeholder="Portfolio or profile URL">
+          <div class="two-col">
+            <label class="file-box">Replace photo<input name="photo" type="file" accept="image/*"></label>
+            <label class="file-box">Replace resume<input name="resume" type="file" accept=".pdf,.doc,.docx,image/*"></label>
+          </div>
+          <div class="admin-actions">
+            <button class="button primary" type="submit"><i data-lucide="save"></i> Save Changes</button>
+            <button class="button ghost" type="button" data-edit-close>Cancel</button>
+          </div>
+        </form>
+      </article>
       {% else %}
       <div class="empty">No freelancer profiles added yet.</div>
       {% endfor %}
     </div>
+    {% if freelancer_total_pages > 1 %}
+    <nav class="pagination" aria-label="Freelancer profile pages">
+      {% if freelancer_page > 1 %}
+      <a class="button ghost" href="/admin?video_q={{ video_q | urlencode }}&video_page={{ video_page }}&channel_q={{ channel_q | urlencode }}&channel_page={{ channel_page }}&freelancer_q={{ freelancer_q | urlencode }}&freelancer_page={{ freelancer_page - 1 }}">Previous</a>
+      {% endif %}
+      <span>Page {{ freelancer_page }} of {{ freelancer_total_pages }}</span>
+      {% if freelancer_page < freelancer_total_pages %}
+      <a class="button ghost" href="/admin?video_q={{ video_q | urlencode }}&video_page={{ video_page }}&channel_q={{ channel_q | urlencode }}&channel_page={{ channel_page }}&freelancer_q={{ freelancer_q | urlencode }}&freelancer_page={{ freelancer_page + 1 }}">Next</a>
+      {% endif %}
+    </nav>
+    {% endif %}
   </section>
 </section>
 {% endblock %}

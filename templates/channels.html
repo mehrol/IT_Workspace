@@ -8,7 +8,12 @@
 </section>
 
 <section class="section">
-  <div class="channel-grid">
+  {% if channels %}
+  <div class="rail-shell" data-rail-shell>
+    <button class="rail-arrow rail-arrow-left" type="button" aria-label="Previous channels" data-rail-prev>
+      <i data-lucide="chevron-left"></i>
+    </button>
+    <div class="channel-rail" data-rail-track>
     {% for channel in channels %}
     <a class="channel-tile" href="{{ channel.url }}" target="_blank" rel="noopener">
       {% if channel.image_path %}
@@ -18,9 +23,14 @@
       {% endif %}
       <strong>{{ channel.name }}</strong>
     </a>
-    {% else %}
-    <div class="empty">No channels matched your search.</div>
     {% endfor %}
+    </div>
+    <button class="rail-arrow rail-arrow-right" type="button" aria-label="Next channels" data-rail-next>
+      <i data-lucide="chevron-right"></i>
+    </button>
   </div>
+  {% else %}
+  <div class="empty">No channels matched your search.</div>
+  {% endif %}
 </section>
 {% endblock %}

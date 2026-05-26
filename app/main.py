@@ -405,14 +405,148 @@ def delete_video(video_id: int, db: Session = Depends(get_db), owner: bool = Dep
 
 
 @app.get("/admin", response_class=HTMLResponse)
-def admin(request: Request, db: Session = Depends(get_db), owner: bool = Depends(require_owner)):
-    videos_ = db.scalars(select(Video).order_by(Video.created_at.desc())).all()
-    channels = db.scalars(select(Channel).order_by(Channel.created_at.desc())).all()
-    freelancers = db.scalars(select(FreelancerProfile).order_by(FreelancerProfile.created_at.desc())).all()
+def admin(
+    request: Request,
+    video_q: str | None = None,
+    video_page: int = 1,
+    channel_q: str | None = None,
+    channel_page: int = 1,
+    freelancer_q: str | None = None,
+    freelancer_page: int = 1,
+    db: Session = Depends(get_db),
+    owner: bool = Depends(require_owner),
+):
+    page_size = 5
+    safe_page = max(1, video_page)
+    all_videos = db.scalars(select(Video).order_by(Video.created_at.desc())).all()
+    video_query = select(Video)
+    if video_q:
+        needle = f"%{video_q.strip()}%"
+        video_query = video_query.where(
+            or_(
+                Video.title.ilike(needle),
+                Video.description.ilike(needle),
+                Video.keywords.ilike(needle),
+                Video.source_url.ilike(needle),
+                Video.direct_play_url.ilike(needle),
+            )
+        )
+    total_videos = db.scalar(select(func.count()).select_from(video_query.subquery())) or 0
+    total_video_pages = max(1, (total_videos + page_size - 1) // page_size)
+    safe_page = min(safe_page, total_video_pages)
+    videos_ = db.scalars(
+        video_query.order_by(Video.created_at.desc()).offset((safe_page - 1) * page_size).limit(page_size)
+    ).all()
+    all_channels = db.scalars(select(Channel).order_by(Channel.created_at.desc())).all()
+    channel_query = select(Channel)
+    if channel_q:
+        needle = f"%{channel_q.strip()}%"
+        channel_query = channel_query.where(or_(Channel.name.ilike(needle), Channel.url.ilike(needle), Channel.icon.ilike(needle)))
+    total_channels = db.scalar(select(func.count()).select_from(channel_query.subquery())) or 0
+    total_channel_pages = max(1, (total_channels + page_size - 1) // page_size)
+    safe_channel_page = min(max(1, channel_page), total_channel_pages)
+    channels = db.scalars(
+        channel_query.order_by(Channel.created_at.desc()).offset((safe_channel_page - 1) * page_size).limit(page_size)
+    ).all()
+
+    all_freelancers = db.scalars(select(FreelancerProfile).order_by(FreelancerProfile.created_at.desc())).all()
+    freelancer_query = select(FreelancerProfile)
+    if freelancer_q:
+        needle = f"%{freelancer_q.strip()}%"
+        freelancer_query = freelancer_query.where(
+            or_(
+                FreelancerProfile.name.ilike(needle),
+                FreelancerProfile.role.ilike(needle),
+                FreelancerProfile.domain.ilike(needle),
+                FreelancerProfile.location.ilike(needle),
+                FreelancerProfile.skills.ilike(needle),
+                FreelancerProfile.email.ilike(needle),
+            )
+        )
+    total_freelancers = db.scalar(select(func.count()).select_from(freelancer_query.subquery())) or 0
+    total_freelancer_pages = max(1, (total_freelancers + page_size - 1) // page_size)
+    safe_freelancer_page = min(max(1, freelancer_page), total_freelancer_pages)
+    freelancers = db.scalars(
+        freelancer_query.order_by(FreelancerProfile.created_at.desc())
+        .offset((safe_freelancer_page - 1) * page_size)
+        .limit(page_size)
+    ).all()
     return templates.TemplateResponse(
         "admin.html",
-        {"request": request, "videos": videos_, "channels": channels, "freelancers": freelancers, "show_search": False},
+        {
+            "request": request,
+            "videos": videos_,
+            "all_videos": all_videos,
+            "video_q": video_q or "",
+            "video_page": safe_page,
+            "video_total": total_videos,
+            "video_total_pages": total_video_pages,
+            "channels": channels,
+            "all_channels": all_channels,
+            "channel_q": channel_q or "",
+            "channel_page": safe_channel_page,
+            "channel_total": total_channels,
+            "channel_total_pages": total_channel_pages,
+            "freelancers": freelancers,
+            "all_freelancers": all_freelancers,
+            "freelancer_q": freelancer_q or "",
+            "freelancer_page": safe_freelancer_page,
+            "freelancer_total": total_freelancers,
+            "freelancer_total_pages": total_freelancer_pages,
+            "show_search": False,
+        },
     )
+
+
+@app.post("/admin/videos/{video_id}/edit")
+def edit_video(
+    video_id: int,
+    title: str = Form(...),
+    description: str = Form(""),
+    keywords: str = Form(""),
+    video_type: str = Form(...),
+    category: str = Form(""),
+    playlist: str = Form(""),
+    video_url: str = Form(...),
+    direct_play_url: str = Form(""),
+    poster: UploadFile | None = File(None),
+    next_url: str = Form("/admin"),
+    db: Session = Depends(get_db),
+    owner: bool = Depends(require_owner),
+):
+    video = db.get(Video, video_id)
+    if not video:
+        raise HTTPException(status_code=404)
+    if video_type not in {"short", "long"}:
+        raise HTTPException(status_code=400, detail="Video type must be short or long.")
+
+    embed_details = build_embed_details(video_url)
+    clean_direct_play_url = direct_play_url.strip() or embed_details["direct_play_url"]
+    if clean_direct_play_url and not is_direct_media_url(clean_direct_play_url):
+        raise HTTPException(status_code=400, detail="Direct play URL must end with .mp4, .webm, .ogg, .mov, or .m3u8.")
+
+    if poster and poster.filename:
+        delete_media_file(video.poster_path)
+        poster_path = save_upload(poster, POSTER_DIR)
+        video.poster_path = str(poster_path) if poster_path else None
+
+    video.title = title.strip()
+    video.description = description.strip()
+    video.keywords = keywords.strip()
+    video.video_type = video_type
+    video.source_path = video_url.strip()
+    video.source_url = video_url.strip()
+    video.direct_play_url = clean_direct_play_url
+    video.embed_url = embed_details["embed_url"]
+    video.external_platform = "direct" if clean_direct_play_url else embed_details["platform"]
+    video.thumbnail_url = embed_details["thumbnail_url"]
+    video.category = get_or_create_named(db, Category, category)
+    video.playlist = get_or_create_named(db, Playlist, playlist) if video_type == "long" else None
+    video.processing_status = "linked"
+    db.commit()
+
+    redirect_target = next_url if next_url.startswith("/admin") else "/admin"
+    return RedirectResponse(redirect_target, status_code=303)
 
 
 @app.post("/admin/upload")
@@ -475,6 +609,32 @@ def add_channel(
     return RedirectResponse("/admin", status_code=303)
 
 
+@app.post("/admin/channels/{channel_id}/edit")
+def edit_channel(
+    channel_id: int,
+    name: str = Form(...),
+    url: str = Form(...),
+    icon: str = Form("user"),
+    image: UploadFile | None = File(None),
+    next_url: str = Form("/admin"),
+    db: Session = Depends(get_db),
+    owner: bool = Depends(require_owner),
+):
+    channel = db.get(Channel, channel_id)
+    if not channel:
+        raise HTTPException(status_code=404)
+    if image and image.filename:
+        delete_media_file(channel.image_path)
+        image_path = save_upload(image, CHANNEL_DIR)
+        channel.image_path = str(image_path) if image_path else None
+    channel.name = name.strip()
+    channel.url = url.strip()
+    channel.icon = icon.strip() or "user"
+    db.commit()
+    redirect_target = next_url if next_url.startswith("/admin") else "/admin"
+    return RedirectResponse(redirect_target, status_code=303)
+
+
 @app.post("/admin/channels/{channel_id}/toggle")
 def toggle_channel(channel_id: int, db: Session = Depends(get_db), owner: bool = Depends(require_owner)):
     channel = db.get(Channel, channel_id)
@@ -535,6 +695,53 @@ def add_freelancer(
     )
     db.commit()
     return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/freelancers/{profile_id}/edit")
+def edit_freelancer(
+    profile_id: int,
+    name: str = Form(...),
+    role: str = Form(...),
+    domain: str = Form(...),
+    location: str = Form(""),
+    experience: str = Form(""),
+    skills: str = Form(""),
+    bio: str = Form(""),
+    email: str = Form(""),
+    phone: str = Form(""),
+    portfolio_url: str = Form(""),
+    photo: UploadFile | None = File(None),
+    resume: UploadFile | None = File(None),
+    next_url: str = Form("/admin"),
+    db: Session = Depends(get_db),
+    owner: bool = Depends(require_owner),
+):
+    profile = db.get(FreelancerProfile, profile_id)
+    if not profile:
+        raise HTTPException(status_code=404)
+    if domain.lower() not in {"tech", "design"}:
+        raise HTTPException(status_code=400, detail="Freelancer domain must be Tech or Design.")
+    if photo and photo.filename:
+        delete_media_file(profile.photo_path)
+        photo_path = save_upload(photo, PROFILE_DIR)
+        profile.photo_path = str(photo_path) if photo_path else None
+    if resume and resume.filename:
+        delete_media_file(profile.resume_path)
+        resume_path = save_upload(resume, RESUME_DIR)
+        profile.resume_path = str(resume_path) if resume_path else None
+    profile.name = name.strip()
+    profile.role = role.strip()
+    profile.domain = domain.strip()
+    profile.location = location.strip()
+    profile.experience = experience.strip()
+    profile.skills = skills.strip()
+    profile.bio = bio.strip()
+    profile.email = email.strip()
+    profile.phone = phone.strip()
+    profile.portfolio_url = portfolio_url.strip()
+    db.commit()
+    redirect_target = next_url if next_url.startswith("/admin") else "/admin"
+    return RedirectResponse(redirect_target, status_code=303)
 
 
 @app.post("/admin/freelancers/{profile_id}/toggle")
