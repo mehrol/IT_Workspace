@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 
@@ -6,6 +7,7 @@ from sqlalchemy.engine import URL, make_url
 from typing import Generator
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
+logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 RAW_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:5432/tech_video_hub")
@@ -23,7 +25,14 @@ def _normalize_database_url(database_url: str) -> str:
 
 
 DATABASE_URL = _normalize_database_url(RAW_DATABASE_URL)
-engine = create_engine(DATABASE_URL)
+logger.info(f"Database URL configured (host: {make_url(DATABASE_URL).host})")
+
+try:
+    engine = create_engine(DATABASE_URL)
+except Exception as e:
+    logger.error(f"Failed to create database engine: {e}")
+    raise
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -48,35 +57,51 @@ def _validate_postgres_url(database_url: str) -> URL:
     return url
 
 
+
 def _quoted_identifier(value: str) -> str:
     return '"' + value.replace('"', '""') + '"'
 
 
 def ensure_database_exists() -> None:
     """Create the configured PostgreSQL database when it does not exist yet."""
-    target_url = _validate_postgres_url(DATABASE_URL)
-    admin_url = target_url.set(database=POSTGRES_MAINTENANCE_DB)
-    admin_engine = create_engine(admin_url, isolation_level="AUTOCOMMIT")
-
     try:
-        with admin_engine.connect() as connection:
-            exists = connection.scalar(
-                text("SELECT 1 FROM pg_database WHERE datname = :database_name"),
-                {"database_name": target_url.database},
-            )
-            if not exists:
-                connection.exec_driver_sql(f"CREATE DATABASE {_quoted_identifier(target_url.database)}")
-    finally:
-        admin_engine.dispose()
+        target_url = _validate_postgres_url(DATABASE_URL)
+        admin_url = target_url.set(database=POSTGRES_MAINTENANCE_DB)
+        admin_engine = create_engine(admin_url, isolation_level="AUTOCOMMIT", connect_args={"timeout": 10})
+
+        try:
+            with admin_engine.connect() as connection:
+                logger.info(f"Checking if database '{target_url.database}' exists...")
+                exists = connection.scalar(
+                    text("SELECT 1 FROM pg_database WHERE datname = :database_name"),
+                    {"database_name": target_url.database},
+                )
+                if not exists:
+                    logger.info(f"Creating database '{target_url.database}'...")
+                    connection.exec_driver_sql(f"CREATE DATABASE {_quoted_identifier(target_url.database)}")
+                    logger.info(f"Database '{target_url.database}' created successfully")
+                else:
+                    logger.info(f"Database '{target_url.database}' already exists")
+        finally:
+            admin_engine.dispose()
+    except Exception as e:
+        logger.error(f"Error ensuring database exists: {e}", exc_info=True)
+        raise
 
 
 def run_migrations() -> None:
     """Apply pending Alembic migrations to the configured database."""
-    from alembic import command
+    try:
+        from alembic import command
 
-    alembic_config = _alembic_config()
-    adopt_existing_schema(alembic_config)
-    command.upgrade(alembic_config, "head")
+        logger.info("Running database migrations...")
+        alembic_config = _alembic_config()
+        adopt_existing_schema(alembic_config)
+        command.upgrade(alembic_config, "head")
+        logger.info("Database migrations completed successfully")
+    except Exception as e:
+        logger.error(f"Error running migrations: {e}", exc_info=True)
+        raise
 
 
 def _alembic_config():
@@ -91,35 +116,48 @@ def _alembic_config():
 
 def adopt_existing_schema(alembic_config) -> None:
     """Mark legacy create_all schemas as migrated when they already match the app."""
-    from alembic import command
+    try:
+        from alembic import command
 
-    expected_tables = {
-        "categories",
-        "playlists",
-        "videos",
-        "comments",
-        "likes",
-        "channels",
-        "freelancer_profiles",
-    }
-    with engine.connect() as connection:
-        inspector = inspect(connection)
-        existing_tables = set(inspector.get_table_names())
-        if "alembic_version" in existing_tables or not expected_tables.issubset(existing_tables):
-            return
+        expected_tables = {
+            "categories",
+            "playlists",
+            "videos",
+            "comments",
+            "likes",
+            "channels",
+            "freelancer_profiles",
+        }
+        with engine.connect() as connection:
+            inspector = inspect(connection)
+            existing_tables = set(inspector.get_table_names())
+            if "alembic_version" in existing_tables or not expected_tables.issubset(existing_tables):
+                logger.debug("Schema adoption: migrations already applied or tables incomplete")
+                return
 
-        expected_columns = {table.name: set(table.columns.keys()) for table in Base.metadata.sorted_tables}
-        if any(
-            expected_columns[table] - {column["name"] for column in inspector.get_columns(table)}
-            for table in expected_tables
-        ):
-            return
+            expected_columns = {table.name: set(table.columns.keys()) for table in Base.metadata.sorted_tables}
+            if any(
+                expected_columns[table] - {column["name"] for column in inspector.get_columns(table)}
+                for table in expected_tables
+            ):
+                logger.debug("Schema adoption: column mismatch detected")
+                return
 
-    command.stamp(alembic_config, "head")
+        logger.info("Stamping existing schema as migrated")
+        command.stamp(alembic_config, "head")
+    except Exception as e:
+        logger.warning(f"Could not adopt existing schema: {e}")
+        # Don't raise - this is a non-critical operation
 
 
 def initialize_database() -> None:
     """Ensure the PostgreSQL database exists and is migrated before use."""
-    if AUTO_CREATE_DATABASE:
-        ensure_database_exists()
-    run_migrations()
+    try:
+        logger.info(f"Initializing database (AUTO_CREATE_DATABASE={AUTO_CREATE_DATABASE})...")
+        if AUTO_CREATE_DATABASE:
+            ensure_database_exists()
+        run_migrations()
+        logger.info("Database initialization completed successfully")
+    except Exception as e:
+        logger.error(f"Critical error during database initialization: {e}", exc_info=True)
+        raise

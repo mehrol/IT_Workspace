@@ -1,7 +1,9 @@
+import logging
 import os
 import re
 import shutil
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -16,6 +18,10 @@ from sqlalchemy.orm import Session
 from .database import get_db, initialize_database
 from .models import Category, Channel, Comment, FreelancerProfile, Like, Playlist, Video
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 MEDIA_DIR = BASE_DIR / "media"
@@ -27,21 +33,65 @@ RESUME_DIR = MEDIA_DIR / "resumes"
 CAPTION_DIR = MEDIA_DIR / "captions"
 HLS_DIR = MEDIA_DIR / "hls"
 
+# Create directories with error handling
 for directory in (UPLOAD_DIR, POSTER_DIR, CHANNEL_DIR, PROFILE_DIR, RESUME_DIR, CAPTION_DIR, HLS_DIR):
-    directory.mkdir(parents=True, exist_ok=True)
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        logger.warning(f"Could not create directory {directory}: {e}")
 
-app = FastAPI(title="Tech Video Hub")
-app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
-app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    try:
+        logger.info("Starting database initialization...")
+        initialize_database()
+        logger.info("Database initialization completed successfully")
+    except Exception as e:
+        logger.error(f"Database initialization failed: {e}", exc_info=True)
+        raise
+    yield
+    # Shutdown
+    logger.info("Application shutting down")
+
+
+app = FastAPI(title="Tech Video Hub", lifespan=lifespan)
+
+# Mount static files with validation
+try:
+    static_dir = BASE_DIR / "static"
+    if static_dir.exists():
+        app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    else:
+        logger.warning(f"Static directory not found: {static_dir}")
+except Exception as e:
+    logger.warning(f"Could not mount static files: {e}")
+
+# Mount media files with validation
+try:
+    if MEDIA_DIR.exists():
+        app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
+    else:
+        logger.warning(f"Media directory not found: {MEDIA_DIR}")
+except Exception as e:
+    logger.warning(f"Could not mount media files: {e}")
+
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 serializer = URLSafeSerializer(os.getenv("SECRET_KEY", "replace-this-secret-key"), salt="owner-session")
 OWNER_PASSWORD = os.getenv("OWNER_PASSWORD", "change-me-now")
 
 
-@app.on_event("startup")
-def startup() -> None:
-    initialize_database()
+# Add global exception handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception in {request.url.path}: {exc}", exc_info=True)
+    return {
+        "status": "error",
+        "message": "Internal server error",
+        "detail": str(exc) if logger.level == logging.DEBUG else "An error occurred"
+    }
 
 
 def slugify(value: str) -> str:
