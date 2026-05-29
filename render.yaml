@@ -8,6 +8,12 @@ services:
       - key: PYTHON_VERSION
         value: 3.11.9
       - key: AUTO_CREATE_DATABASE
-        value: "true"
+        value: "false"
       - key: PORT
         value: 8000
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: OWNER_PASSWORD
+        sync: false
