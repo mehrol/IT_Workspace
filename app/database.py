@@ -13,6 +13,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 RAW_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:5432/tech_video_hub")
 POSTGRES_MAINTENANCE_DB = os.getenv("POSTGRES_MAINTENANCE_DB", "postgres")
 AUTO_CREATE_DATABASE = os.getenv("AUTO_CREATE_DATABASE", "true").lower() in {"1", "true", "yes", "on"}
+print(f"DATABASE_URL = {RAW_DATABASE_URL}")
 
 
 def _normalize_database_url(database_url: str) -> str:
