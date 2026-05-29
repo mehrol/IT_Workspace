@@ -15,6 +15,8 @@ from app import models  # noqa: F401
 # access to the values within the .ini file in use.
 config = context.config
 
+DATABASE_URL = os.getenv("DATABASE_URL")
+
 config.set_main_option("sqlalchemy.url", DATABASE_URL.replace("%", "%%"))
 
 # Interpret the config file for Python logging.
