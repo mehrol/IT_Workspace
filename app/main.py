@@ -5,7 +5,7 @@ import shutil
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -105,16 +105,26 @@ def slugify(value: str) -> str:
 def media_url(path: str | None) -> str | None:
     if not path:
         return None
-    media_path = Path(path)
+    raw_path = str(path).strip()
+    if raw_path.startswith(("http://", "https://", "/media/", "/static/")):
+        return raw_path
+
+    parsed = urlparse(raw_path)
+    normalized_path = unquote(parsed.path if parsed.scheme == "file" else raw_path).replace("\\", "/")
+    media_marker = "/media/"
+    marker_index = normalized_path.lower().rfind(media_marker)
+    if marker_index >= 0:
+        relative_path = normalized_path[marker_index + len(media_marker) :]
+        return "/media/" + relative_path.lstrip("/")
+
+    media_path = Path(normalized_path)
     try:
-        relative_path = media_path.relative_to(MEDIA_DIR)
+        relative_path = media_path.relative_to(MEDIA_DIR).as_posix()
     except ValueError:
-        parts = media_path.parts
-        media_indexes = [index for index, part in enumerate(parts) if part.lower() == "media"]
-        if not media_indexes:
-            return str(path)
-        relative_path = Path(*parts[media_indexes[-1] + 1 :])
-    return "/media/" + relative_path.as_posix()
+        if media_path.is_absolute() or parsed.scheme:
+            return None
+        relative_path = media_path.as_posix()
+    return "/media/" + relative_path.lstrip("/")
 
 
 templates.env.filters["media_url"] = media_url
@@ -153,14 +163,17 @@ def save_upload(upload: UploadFile, folder: Path) -> Path | None:
     target = folder / safe_name
     with target.open("wb") as buffer:
         shutil.copyfileobj(upload.file, buffer)
-    return target
+    return target.relative_to(MEDIA_DIR)
 
 
 def delete_media_file(path: str | None):
     if not path:
         return
+    media_path = media_url(path)
+    if not media_path or not media_path.startswith("/media/"):
+        return
     try:
-        target = Path(path).resolve()
+        target = (MEDIA_DIR / media_path.removeprefix("/media/")).resolve()
         media_root = MEDIA_DIR.resolve()
         if target.is_file() and target.is_relative_to(media_root):
             target.unlink()
