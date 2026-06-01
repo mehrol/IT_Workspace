@@ -13,7 +13,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 RAW_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:5432/tech_video_hub")
 POSTGRES_MAINTENANCE_DB = os.getenv("POSTGRES_MAINTENANCE_DB", "postgres")
 AUTO_CREATE_DATABASE = os.getenv("AUTO_CREATE_DATABASE", "true").lower() in {"1", "true", "yes", "on"}
-print(f"DATABASE_URL = {RAW_DATABASE_URL}")
 
 
 def _normalize_database_url(database_url: str) -> str:
@@ -68,7 +67,7 @@ def ensure_database_exists() -> None:
     try:
         target_url = _validate_postgres_url(DATABASE_URL)
         admin_url = target_url.set(database=POSTGRES_MAINTENANCE_DB)
-        admin_engine = create_engine(admin_url, isolation_level="AUTOCOMMIT", connect_args={"timeout": 10})
+        admin_engine = create_engine(admin_url, isolation_level="AUTOCOMMIT")
 
         try:
             with admin_engine.connect() as connection:

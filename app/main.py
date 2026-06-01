@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeSerializer
@@ -87,11 +87,14 @@ OWNER_PASSWORD = os.getenv("OWNER_PASSWORD", "change-me-now")
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled exception in {request.url.path}: {exc}", exc_info=True)
-    return {
-        "status": "error",
-        "message": "Internal server error",
-        "detail": str(exc) if logger.level == logging.DEBUG else "An error occurred"
-    }
+    return JSONResponse(
+        status_code=500,
+        content={
+            "status": "error",
+            "message": "Internal server error",
+            "detail": str(exc) if logger.level == logging.DEBUG else "An error occurred",
+        },
+    )
 
 
 def slugify(value: str) -> str:
@@ -102,7 +105,16 @@ def slugify(value: str) -> str:
 def media_url(path: str | None) -> str | None:
     if not path:
         return None
-    return "/media/" + str(Path(path).relative_to(MEDIA_DIR)).replace("\\", "/")
+    media_path = Path(path)
+    try:
+        relative_path = media_path.relative_to(MEDIA_DIR)
+    except ValueError:
+        parts = media_path.parts
+        media_indexes = [index for index, part in enumerate(parts) if part.lower() == "media"]
+        if not media_indexes:
+            return str(path)
+        relative_path = Path(*parts[media_indexes[-1] + 1 :])
+    return "/media/" + relative_path.as_posix()
 
 
 templates.env.filters["media_url"] = media_url
@@ -274,6 +286,9 @@ def freelancer_list_query(db: Session, search: str | None = None, domain: str | 
         )
     return db.scalars(query.order_by(FreelancerProfile.created_at.desc())).all()
 
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request, q: str | None = None, db: Session = Depends(get_db)):
