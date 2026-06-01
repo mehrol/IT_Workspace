@@ -555,7 +555,7 @@ function bootYouTubeShortPlayer(iframe, player) {
     if (state === YT.PlayerState.PLAYING) {
       player.pauseVideo();
     } else {
-      player.mute();
+      player.unMute();
       player.playVideo();
     }
   };
@@ -564,7 +564,7 @@ function bootYouTubeShortPlayer(iframe, player) {
   bindShortSwipe(layer, layer.dataset.nextUrl || iframe.dataset.nextUrl);
 
   try {
-    player.mute();
+    player.unMute();
     player.playVideo();
   } catch (_) {}
 }
